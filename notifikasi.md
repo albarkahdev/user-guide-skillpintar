@@ -1,0 +1,42 @@
+# Notifikasi
+
+**Notifikasi** memberi tahu Anda tentang aktivitas terkait tes, kursus, dan lencana.
+
+## Lonceng notifikasi (header)
+
+Di pojok kanan atas dashboard ada ikon **lonceng**:
+
+- Angka merah menunjukkan jumlah notifikasi belum dibaca (maksimal tampil **99+**).
+- Klik untuk membuka pratinjau **6 notifikasi terbaru**.
+- Klik salah satu item → ditandai terbaca dan diarahkan ke halaman terkait.
+- Tombol **Mark all as read** menandai semua terbaca.
+- Tombol **View all** → membuka halaman penuh.
+
+> Notifikasi diperbarui saat halaman dimuat atau saat dropdown lonceng dibuka.
+
+## Halaman notifikasi
+
+**Alamat:** `/dashboard/notifications`
+
+Fitur:
+
+- Tab **All / Unread**, ditambah **Tests / Courses / Badges** (bisa ditampilkan/sembunyikan).
+- Filter waktu: **All time / Today / This week / This month**.
+- Notifikasi dikelompokkan: **Today / This Week / Earlier**.
+- Panel **Notification Summary** — jumlah Total, Belum Dibaca (Unread), Tes, Kursus, Lencana, Lainnya.
+- **Quick Actions** — **Mark all as read** dan **Clear all notifications**.
+
+Aksi per item:
+
+- **Tandai terbaca** (satu notifikasi).
+- **Hapus** satu notifikasi.
+- **Mark all as read** — tandai semua terbaca.
+- **Clear all read** — hapus semua yang sudah dibaca.
+
+Jika kosong: *"No notifications — You don't have any notifications at the moment."*
+
+## Notifikasi browser (opsional)
+
+Anda bisa mengaktifkan **Browser Notifications** lewat **Pengaturan → Notifications**. Saat diaktifkan, browser akan meminta izin. Jika ditolak/tidak didukung, notifikasi browser tidak akan muncul.
+
+> Pemberitahuan via **Email**, **WhatsApp**, dan **Calendar** masih bertanda **"Coming Soon"** (belum aktif).
