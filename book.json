@@ -1,0 +1,17 @@
+{
+  "title": "Panduan Pengguna SkillPintar",
+  "language": "id",
+  "structure": {
+    "readme": "README.md",
+    "summary": "SUMMARY.md"
+  },
+  "ignore": [
+    "package.json",
+    "package-lock.json",
+    "book.json",
+    ".gitbook.yaml",
+    ".github",
+    "node_modules",
+    "_book"
+  ]
+}
