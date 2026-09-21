@@ -1,0 +1,135 @@
+---
+title: "13 — Referensi perintah (cheat sheet)"
+sidebarTitle: "Referensi perintah (cheat sheet)"
+description: "Semua dari cd ~/skillpintar-nextjs di server. E=.env.prod sebagai singkatan — kalau mau, alias mk='make ENV=.env.prod' di ~/.bashrc."
+---
+## Status dan log
+
+```bash
+make show_status ENV=.env.prod                 # container up? healthy?
+make show_logs ENV=.env.prod                   # log mengalir (Ctrl+C)
+docker logs --since 30m skillpintar-nextjs-prod 2>&1 | tail -50
+docker logs --since 24h skillpintar-nextjs-prod 2>&1 | grep -i error | sort | uniq -c | sort -rn | head
+docker inspect --format '{{.Config.Image}}' skillpintar-nextjs-prod   # versi yang jalan
+make show_current_image                        # versi git/tag di folder repo
+curl -s http://127.0.0.1:3000/api/health       # {"status":"ok"}
+docker stats --no-stream skillpintar-nextjs-prod
+df -h / ; free -h ; uptime
+```
+
+## Deploy dan rollback
+
+```bash
+make backup ENV=.env.prod
+git fetch && git checkout develop && git pull
+make build_image && make tag_latest
+make deploy ENV=.env.prod
+make list_images
+make rollback TAG=skillpintar-nextjs:<tag-lama> ENV=.env.prod
+docker restart skillpintar-nextjs-prod
+docker stop skillpintar-nextjs-prod ; docker start skillpintar-nextjs-prod
+make cleanup_old_images ; docker system prune -f ; docker builder prune -af
+```
+
+## Backup dan restore
+
+```bash
+make backup ENV=.env.prod                      # → ./backups/mongo-YYYYMMDD-HHMMSS.archive.gz (+ .db)
+make backup_list
+docker stop skillpintar-nextjs-prod
+make restore FILE=backups/mongo-....archive.gz ENV=.env.prod     # ketik RESTORE
+docker start skillpintar-nextjs-prod
+./scripts/restore-mongo.sh ARSIP .env.prod --from-db NAMA_ASAL   # kalau file .db hilang
+tail ~/backup.log                              # cron semalam
+crontab -l
+```
+
+## Database (lihat saja, kecuali bab 09)
+
+```bash
+MONGODB_URI="$(grep '^MONGODB_URI=' .env.prod | cut -d= -f2- | tr -d '"')"
+docker run --rm -it --network host mongo:7 mongosh "$MONGODB_URI"
+```
+```js
+show collections
+db.users.countDocuments({ isGuest: { $ne: true } })          // creator
+db.users.countDocuments({ isGuest: true })                    // peserta tamu
+db.temporary_users.distinct("email").length                   // peserta undangan
+db.organizations.countDocuments({ deletedAt: { $exists: false } })
+db["test-sessions"].countDocuments({ createdAt: { $gte: new Date(Date.now()-7*864e5) } })
+db.users.findOne({ email: "x@y.id" }, { id:1, emailVerified:1, isGuest:1 })
+db.users.updateOne({ email: "x@y.id" }, { $set: { emailVerified: true } })   // verifikasi manual (bab 09 §2)
+```
+
+## Redis
+
+```bash
+docker exec skillpintar-redis redis-cli ping
+docker exec skillpintar-redis redis-cli dbsize
+docker exec skillpintar-redis redis-cli --scan --pattern 'ratelimit:login:*' | xargs -r docker exec -i skillpintar-redis redis-cli del   # buka blokir login (T-06)
+docker exec skillpintar-redis redis-cli del "org-membership:<userId>:<orgId>" "access-rbac-permissions:<userId>:<orgId>"   # segarkan izin (T-19)
+```
+
+## Password hash (bab 09 §3)
+
+```bash
+docker exec skillpintar-nextjs-prod node -e 'console.log(require("bcryptjs").hashSync(process.argv[1],10))' 'PasswordBaru'
+```
+
+## Caddy
+
+```bash
+sudo systemctl status caddy ; sudo systemctl reload caddy ; sudo systemctl restart caddy
+sudo journalctl -u caddy --since "30 min ago"
+caddy validate --config /etc/caddy/Caddyfile
+cat /etc/caddy/Caddyfile
+```
+
+## Sistem
+
+```bash
+sudo ufw status
+sudo ss -tlnp | grep -E ':(3000|6379|27017|80|443)'
+last -20
+sudo apt update && sudo apt upgrade -y ; ls /var/run/reboot-required && sudo reboot
+timedatectl
+curl -s ifconfig.me                            # IP publik server (untuk allowlist Atlas)
+openssl rand -base64 48                        # secret baru
+awk -F= '/^JWT_(REFRESH_)?SECRET=/{print $1, length($2)}' .env.prod
+grep -c ALLOW_TEST_ROUTES .env.prod            # harus 0
+```
+
+## Skrip pengembang yang berguna di server (butuh bun; lewat container)
+
+```bash
+# cek data sebelum deploy versi dengan indeks unik baru
+docker run --rm --network host -v $PWD:/app -w /app --env-file .env.prod oven/bun:1.2.10-alpine \
+  sh -c 'bun install --frozen-lockfile >/dev/null && bun run scripts/check-index-preconditions.ts'
+```
+
+## Laporan trial
+
+```bash
+bun run scripts/trial-report.ts        # dari laptop; MONGODB_URI + TRIAL_MAX_* dari .env.local
+# di server (tanpa bun):
+docker run --rm --network host -v $PWD:/app -w /app --env-file .env.prod oven/bun:1.2.10-alpine \
+  sh -c 'bun install --frozen-lockfile >/dev/null && bun run scripts/trial-report.ts'
+```
+
+## Kode T (troubleshooting) yang paling sering
+
+| Kode | Gejala |
+|---|---|
+| T-01 | container unhealthy / restart terus |
+| T-02 | login 500 (JWT secret pendek) |
+| T-05 | lambat 9 detik, Redis |
+| T-06 | 429 too many requests |
+| T-10 | tidak bisa ke MongoDB (allowlist Atlas) |
+| T-11 | data terpecah (MONGODB_DB) |
+| T-12 | email tidak sampai |
+| T-15 | password benar tapi ditolak (email belum diverifikasi) |
+| T-20 | build gagal (RAM) |
+| T-22 | disk penuh |
+| T-30 | 502 |
+| T-31 | HTTPS gagal |
+| T-35 | memantul ke login (bukan HTTPS) |

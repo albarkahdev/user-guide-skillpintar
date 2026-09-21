@@ -1,0 +1,133 @@
+---
+title: "04 — Operasi harian"
+sidebarTitle: "Operasi harian"
+---
+Hal-hal yang akan sering kamu lakukan. Semua dari `~/skillpintar-nextjs` di server. `ENV=.env.prod` selalu ditulis — kalau lupa, `make` memakai `.env` (yang mungkin tidak ada) dan berhenti dengan `Environment file '.env' not found`.
+
+## 1. Melihat status
+
+```bash
+make show_status ENV=.env.prod
+```
+
+Kolom `STATUS`: `Up 3 days (healthy)` = baik. `(unhealthy)` atau `Restarting` = buka bab 08 (T-01). `Up ... (health: starting)` = baru mulai, tunggu 40 detik.
+
+Versi yang sedang jalan:
+
+```bash
+docker inspect --format '{{.Config.Image}}' skillpintar-nextjs-prod
+```
+
+## 2. Melihat log
+
+```bash
+make show_logs ENV=.env.prod          # mengalir terus; Ctrl+C untuk berhenti
+docker logs --since 30m skillpintar-nextjs-prod     # 30 menit terakhir saja
+docker logs --since 2h skillpintar-nextjs-prod 2>&1 | grep -i error   # hanya baris error
+```
+
+Yang normal terlihat: baris request `GET /api/... 200 in 45ms`, `MongoDB connected (PROD)`. Yang perlu diperhatikan: `ensureIndexes failed`, `redis error`, `Error:` berulang, atau tidak ada baris sama sekali padahal orang memakai aplikasi.
+
+Log disimpan Docker maksimal 3 file × 10 MB, lalu yang lama dibuang otomatis. Kalau butuh log lebih lama, salin dulu: `docker logs skillpintar-nextjs-prod > ~/log-$(date +%F).txt 2>&1`.
+
+## 3. Restart (tanpa ganti versi)
+
+```bash
+docker restart skillpintar-nextjs-prod
+```
+
+±40 detik. Pengguna yang sedang mengerjakan tes **tidak kehilangan jawaban** (jawaban disimpan per pertanyaan di database), tapi request yang tepat saat restart gagal sekali — mereka tinggal mengulang klik. Lakukan di jam sepi kalau bisa.
+
+Restart tidak membaca ulang `.env` — untuk itu pakai `make deploy` (§5).
+
+## 4. Update ke versi baru (deploy)
+
+Urutan yang selalu sama. Jangan lompat.
+
+```bash
+cd ~/skillpintar-nextjs
+make backup ENV=.env.prod                    # 1. backup dulu
+git fetch && git checkout develop && git pull   # 2. ambil kode baru (atau: git checkout v1.2.0)
+git log --oneline -5                         #    lihat apa yang berubah
+make build_image                             # 3. bangun image (3–8 menit)
+make tag_latest                              # 4. tandai sebagai latest
+docker inspect --format '{{.Config.Image}}' skillpintar-nextjs-prod   # 5. CATAT versi lama — untuk rollback
+make deploy ENV=.env.prod                    # 6. jalankan versi baru
+make show_status ENV=.env.prod               # 7. tunggu healthy
+```
+
+Lalu **uji 2 menit**: buka situs, login, buka satu tes, logout. Kalau ada yang aneh → rollback (§6) dulu, cari penyebab belakangan.
+
+Catat di catatan operasional: tanggal, versi lama → baru, commit (`git log --oneline -1`).
+
+Sebelum update, **baca `docs/CHANGELOG.md` dan pesan PR** yang masuk: kalau ada tulisan "backfill", "index", "env var baru", atau "re-login", ada langkah tambahan (lihat bagian *Rollout* di RFC yang disebut). Contoh nyata:
+- Versi dengan RFC-0003 (indeks): jalankan `bun run scripts/check-index-preconditions.ts` dulu — atau, di server tanpa bun: `docker run --rm --network host -v $PWD:/app -w /app --env-file .env.prod oven/bun:1.2.10-alpine sh -c 'bun install --frozen-lockfile >/dev/null && bun run scripts/check-index-preconditions.ts'`.
+- Versi dengan ADR-0013 (sesi): semua pengguna login ulang sekali. Umumkan.
+
+## 5. Mengubah `.env.prod`
+
+Bab 03 bagian akhir. Intinya: edit → `make deploy ENV=.env.prod` → cek.
+
+## 6. Rollback (kembali ke versi sebelumnya)
+
+Kalau versi baru bermasalah dan kamu tidak bisa memperbaikinya dalam 10 menit:
+
+```bash
+make list_images                             # cari tag versi lama
+make rollback TAG=skillpintar-nextjs:v0.1.0-develop-build.20260915.2 ENV=.env.prod
+make show_status ENV=.env.prod
+```
+
+Rollback mengganti **aplikasi** saja. **Data tidak ikut mundur.** Kalau versi baru sempat mengubah bentuk data (jarang; RFC-nya akan menyebut "backfill" atau "compensating script"), baca bagian *Rollback* RFC itu. Sejauh ini semua perubahan aman untuk rollback (indeks dibiarkan, tidak mengganggu versi lama).
+
+Setelah rollback: catat, lalu kirim pesan ke pengembang dengan potongan log (`docker logs --since 1h ...`).
+
+## 7. Membersihkan image lama
+
+Setiap `make build_image` menambah ±500 MB. Sebulan sekali, atau kalau disk penuh (T-22):
+
+```bash
+make list_images
+make cleanup_old_images        # menyimpan image terbaru per jenis, menghapus sisanya
+docker system prune -f         # sisa layer build yang tidak terpakai
+df -h /                         # cek ruang
+```
+
+Pastikan image yang sedang jalan dan **satu versi sebelumnya** masih ada (untuk rollback). `cleanup_old_images` menyimpan yang terbaru saja per pola — kalau mau menyimpan lebih, hapus manual dengan `docker rmi <tag>` untuk yang tidak perlu.
+
+## 8. Menghentikan dan menjalankan lagi
+
+```bash
+docker stop skillpintar-nextjs-prod      # berhenti (situs mati, Caddy menjawab 502)
+docker start skillpintar-nextjs-prod     # jalan lagi dengan image dan env yang sama
+```
+
+Dipakai saat restore database (bab 05 §4) supaya tidak ada yang menulis saat data diganti.
+
+## 9. Melihat isi database langsung
+
+Untuk melihat, bukan mengubah. Dari server, tanpa memasang apa pun:
+
+```bash
+MONGODB_URI="$(grep '^MONGODB_URI=' .env.prod | cut -d= -f2- | tr -d '"')"
+docker run --rm -it --network host mongo:7 mongosh "$MONGODB_URI"
+```
+
+Di dalam `mongosh`:
+
+```js
+show collections
+db.users.countDocuments()
+db.users.find({}, {email:1, name:1, emailVerified:1, isGuest:1, createdAt:1}).sort({createdAt:-1}).limit(10)
+db.organizations.find({}, {id:1, name:1, createdBy:1})
+db["test-sessions"].countDocuments({ createdAt: { $gte: new Date(Date.now() - 7*24*3600*1000) } })
+```
+
+Mengubah data langsung hanya untuk kasus yang disebut di bab 09 dan 08, dan selalu setelah `make backup`.
+
+## 10. Yang tidak ada (supaya tidak dicari)
+
+- Tidak ada panel admin di aplikasi. Pengelolaan pengguna = bab 09 (sebagian lewat `mongosh`).
+- Tidak ada tombol "maintenance mode". Kalau perlu menutup situs sebentar: `docker stop` (§8); Caddy menjawab 502 selama itu.
+- Tidak ada proses latar (cron di dalam aplikasi). Semua terjadi saat ada request.
+- Tidak ada pengiriman error otomatis ke mana pun. Log hanya di `docker logs` (bab 06).

@@ -1,0 +1,134 @@
+---
+title: "03 — Konfigurasi: arti setiap baris .env"
+sidebarTitle: "Konfigurasi"
+---
+Satu file per lingkungan: `.env.prod` untuk server trial. Sumber kebenarannya adalah [`.env.example`](https://github.com/muizidn/skillpintar-nextjs/blob/develop/.env.example) di repo — kalau ada variabel baru, muncul di sana lebih dulu. Bab ini menjelaskannya dengan bahasa manusia.
+
+Aturan umum:
+- Format `NAMA=nilai`, tanpa spasi di sekitar `=`. Nilai boleh dibungkus tanda kutip `"..."` kalau mengandung karakter aneh.
+- Baris yang diawali `#` diabaikan.
+- **Setiap perubahan `.env` baru berlaku setelah** `make deploy ENV=.env.prod` (container dibuat ulang; ±40 detik).
+- `chmod 600 .env.prod` — hanya user kamu yang bisa membaca.
+
+## A. Deploy (dibaca oleh `make` dan Docker, bukan aplikasi)
+
+| Variabel | Wajib | Nilai untuk trial | Penjelasan |
+|---|---|---|---|
+| `APP_ENVIRONMENT` | ya | `prod` | Menjadi nama container: `skillpintar-nextjs-prod`. Kalau kosong, `make` memakai `dev` dan container bernama `...-dev` — bukan salah, tapi membingungkan. |
+| `DOCKER_EXPOSED_PORT` | tidak | `127.0.0.1:3000` | Alamat:port di server tempat container "dipasang"; Caddy menunjuk ke sini. Dengan awalan `127.0.0.1:` port hanya bisa diakses dari server sendiri (lapisan kedua setelah ufw). Ganti angkanya hanya kalau 3000 terpakai (T-21). |
+| `BACKUP_KEEP_DAYS` | tidak | `14` | Berapa hari arsip backup lokal disimpan. |
+
+## B. Aplikasi
+
+| Variabel | Wajib | Nilai untuk trial | Penjelasan |
+|---|---|---|---|
+| `NODE_ENV` | ya | `production` | Container selalu memaksa `production` (dari `docker-compose.yml`) — tulis juga di sini supaya konsisten. |
+| `NEXT_PUBLIC_APP_BASE_URL` | ya | `https://skillpintar.contoh.id` | Dipakai di link dalam email (verifikasi, reset password) dan alamat kembali pembayaran. **Salah = link di email mengarah ke tempat salah.** Tanpa `/` di akhir. |
+| `NEXT_PUBLIC_APP_URL` | ya | sama dengan di atas | Dipakai di link undangan organisasi. |
+| `NEXT_PUBLIC_APP_VERSION` | tidak | biarkan | Diisi otomatis saat `make build_image`. |
+| `TRIAL_MAX_CREATORS` | tidak | `20` | Batas akun terdaftar (creator). Kosong/`0` = tanpa batas. Yang ke-21 ditolak saat mendaftar (403). Menaikkan = ubah angka, `make deploy`. |
+| `TRIAL_MAX_TESTERS` | tidak | `100` | Batas email peserta unik (tamu + undangan). Peserta yang sudah pernah masuk **tidak pernah ditolak**, hanya email baru. |
+| `TRIAL_MAX_ORGANIZATIONS` | tidak | `3` | Batas organisasi aktif. Yang ke-4 ditolak saat dibuat. |
+| `ALLOW_TEST_ROUTES` | **JANGAN ADA** | — | Kalau `1`, route `/api/v1/test/*` aktif: bisa **menghapus seluruh database** tanpa login. Aplikasi juga menolaknya saat `NODE_ENV=production`, tapi jangan andalkan satu lapis. Hapus barisnya. |
+
+## C. Sesi login
+
+| Variabel | Wajib | Nilai | Penjelasan |
+|---|---|---|---|
+| `JWT_SECRET` | ya | `openssl rand -base64 48` | Kunci penandatangan token login (berlaku 1 jam). **Minimal 32 karakter** — kalau kurang, login menjawab 500 (T-02). |
+| `JWT_REFRESH_SECRET` | ya | `openssl rand -base64 48` (beda dari atas) | Kunci token perpanjangan (7 hari). |
+
+Mengganti salah satu = **semua pengguna logout** dan harus login lagi. Itu satu-satunya efek; data aman. Lakukan kalau kunci bocor (bab 10) — dan umumkan.
+
+## D. MongoDB
+
+| Variabel | Wajib | Penjelasan |
+|---|---|---|
+| `MONGODB_URI` | ya | Alamat database, **termasuk nama database** di bagian path: `mongodb+srv://user:pass@host/skillpintar?...` (Atlas) atau `mongodb://host.docker.internal:27017/skillpintar` (opsi B). Tanpa nama database, Mongo memakai database bernama `test` — jangan. |
+
+Versi sebelum 2026-09-21 juga membaca variabel `MONGODB_DB` untuk sebagian modul; kalau nilainya berbeda dari nama di URI, data terpecah di dua database (T-11). Sejak versi ini semua modul memakai nama dari URI; `MONGODB_DB` tidak dibaca lagi dan boleh dihapus dari `.env.prod`.
+
+Password yang mengandung `@`, `:`, `/` atau `%` harus di-*URL-encode* di dalam URI (`@` → `%40`, dst.), atau ganti passwordnya dengan yang hanya huruf-angka.
+
+## E. Redis
+
+| Variabel | Wajib | Nilai untuk trial | Penjelasan |
+|---|---|---|---|
+| `REDIS_URL` | ya (di server) | `redis://host.docker.internal:6379` | Kalau terisi, ini yang dipakai. |
+| `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN` | tidak | kosong | Hanya untuk laptop pengembang. Kalau `REDIS_URL` kosong dan ini terisi tapi alamatnya mati, setiap login menunggu ±9 detik (T-05). |
+
+Kalau Redis tidak bisa dihubungi, aplikasi **tetap jalan**: logout tidak "menggigit" (token lama masih laku sampai 1 jam) dan rate-limit tidak berfungsi. Jadi Redis mati = bukan darurat, tapi perbaiki hari itu juga.
+
+## F. Email (Resend)
+
+| Variabel | Wajib | Penjelasan |
+|---|---|---|
+| `RESEND_API_KEY` | ya untuk pendaftaran mandiri | `re_...`. Tanpa ini: daftar/lupa password/undangan gagal dengan 500 saat mengirim email. Login pengguna yang sudah ada tetap jalan. |
+| `ACCOUNT_FROM_EMAIL` | ya | Alamat pengirim, harus di domain yang diverifikasi di Resend. Contoh `SkillPintar <noreply@skillpintar.contoh.id>`. |
+
+## G. Pembayaran (Stripe) — kosongkan untuk trial
+
+| Variabel | Penjelasan |
+|---|---|
+| `PAYMENT_PROVIDER` | Kosong = mode "mock" yang **ditolak di production** (halaman beli menjawab 503, disengaja). `stripe` = pembayaran sungguhan (butuh tiga baris di bawah dan endpoint webhook — `docs/rfc/RFC-0004-stripe-checkout-webhook.md`). |
+| `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` | Hanya bersama `PAYMENT_PROVIDER=stripe`. |
+
+## H. Realtime (Pusher) — opsional
+
+`REALTIME_PROVIDER=pusher`, `PUSHER_APP_ID`, `PUSHER_KEY`, `PUSHER_SECRET`, `PUSHER_CLUSTER=ap1`. Kalau kosong: ada baris `Error sending realtime message` di log saat kredit berubah — tidak berbahaya.
+
+## I. WhatsApp — opsional, belum dipakai
+
+`WHATSAPP_API_URL`, `WHATSAPP_API_KEY`: ada di daftar tapi fitur pengirimannya belum aktif. Kosongkan.
+
+## J. Cloudflare — bukan untuk server
+
+`CLOUDFLARE_*` hanya dipakai GitHub Actions untuk Storybook. Abaikan.
+
+## Contoh `.env.prod` lengkap (nilai palsu)
+
+```env
+APP_ENVIRONMENT=prod
+DOCKER_EXPOSED_PORT=3000
+BACKUP_KEEP_DAYS=14
+
+NODE_ENV=production
+NEXT_PUBLIC_APP_BASE_URL=https://skillpintar.contoh.id
+NEXT_PUBLIC_APP_URL=https://skillpintar.contoh.id
+
+TRIAL_MAX_CREATORS=20
+TRIAL_MAX_TESTERS=100
+TRIAL_MAX_ORGANIZATIONS=3
+
+JWT_SECRET=Q7mZ2v9x...48-karakter-acak...
+JWT_REFRESH_SECRET=Lp3Hc8Ke...48-karakter-acak-lain...
+
+MONGODB_URI="mongodb+srv://skillpintar:PASSWORD@cluster0.abcde.mongodb.net/skillpintar?retryWrites=true&w=majority"
+
+REDIS_URL=redis://host.docker.internal:6379
+UPSTASH_REDIS_REST_URL=
+UPSTASH_REDIS_REST_TOKEN=
+
+RESEND_API_KEY=re_xxxxxxxxxxxxxxxx
+ACCOUNT_FROM_EMAIL=SkillPintar <noreply@skillpintar.contoh.id>
+
+PAYMENT_PROVIDER=
+STRIPE_SECRET_KEY=
+STRIPE_WEBHOOK_SECRET=
+
+REALTIME_PROVIDER=pusher
+PUSHER_APP_ID=
+PUSHER_KEY=
+PUSHER_SECRET=
+PUSHER_CLUSTER=ap1
+```
+
+## Kalau mengubah `.env.prod`
+
+1. `make backup ENV=.env.prod` (kebiasaan).
+2. Edit, simpan.
+3. `make deploy ENV=.env.prod` → container dibuat ulang dengan nilai baru.
+4. `make show_status ENV=.env.prod` → `healthy`; buka situs; login.
+5. Catat perubahannya (bab 07 §4).
+
+Mengubah `JWT_*` → semua logout. Mengubah `MONGODB_URI` ke database lain → pengguna "hilang" (bukan hilang, cuma di database lain).

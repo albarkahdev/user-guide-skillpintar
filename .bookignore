@@ -1,7 +1,0 @@
-package.json
-package-lock.json
-book.json
-.gitbook.yaml
-.github
-node_modules
-_book

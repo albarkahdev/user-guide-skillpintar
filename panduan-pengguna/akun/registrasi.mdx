@@ -1,0 +1,39 @@
+---
+title: "Registrasi (Daftar Akun)"
+description: "Buat akun SkillPintar baru dari halaman registrasi."
+---
+**Alamat halaman:** `/auth/register`
+
+## Langkah daftar
+
+1. Buka halaman **Register**.
+2. Isi tiga kolom berikut:
+   - **Full Name** — nama lengkap Anda.
+   - **Email** — email aktif (akan dikirimi tautan verifikasi).
+   - **Password** — minimal **6 karakter**.
+3. Klik tombol **Register**.
+4. Jika berhasil, muncul tulisan hijau **"Registration successful"**.
+5. Buka email Anda dan klik tautan verifikasi (lihat [Verifikasi Email](/panduan-pengguna/akun/verifikasi-email)).
+
+> Setelah daftar, halaman **tidak** berpindah otomatis. Anda tetap di halaman registrasi — lanjutkan dengan membuka email verifikasi, lalu masuk lewat halaman [Login](/panduan-pengguna/akun/login).
+
+## Aturan pengisian
+
+Pesan kesalahan (tulisan merah) muncul jika:
+
+- Nama kosong → *"Full name is required"*
+- Email kosong → *"Email is required"*
+- Format email salah → *"Invalid email format"*
+- Password kosong → *"Password is required"*
+- Email sudah terdaftar → *"User with this email already exists"*
+- Kuota akun masa uji coba penuh → *"Batas uji coba sudah tercapai. Silakan hubungi penyelenggara."* — jumlah akun pembuat tes selama uji coba dibatasi; hubungi penyelenggara/admin Anda untuk ditambahkan.
+
+## Yang terjadi di balik layar
+
+- Akun dibuat dengan status **email belum terverifikasi**.
+- Sistem otomatis mengirim **email verifikasi** (berlaku 24 jam).
+- Akun tidak langsung tergabung ke organisasi mana pun. Organisasi dibuat/diikuti terpisah lewat [Pengaturan Organisasi](/panduan-pengguna/pengaturan/organisasi).
+
+## Tautan di halaman
+
+- **Already have an account? Login** → kembali ke [Login](/panduan-pengguna/akun/login).

@@ -1,0 +1,105 @@
+---
+title: "Panduan Operasional SkillPintar"
+---
+Buku pegangan untuk orang yang **memasang, menjalankan, dan merawat** SkillPintar di server — bukan untuk pengguna aplikasi (itu ada di [`docs/panduan-pengguna/`](/panduan-pengguna/index)).
+
+Ditulis dalam Bahasa Indonesia, sengaja sederhana. Setiap perintah yang tertulis di sini benar-benar ada di repo ini (`Makefile`, `scripts/`, `docker-compose.yml`) dan sudah dicoba. Kalau sesuatu di sini tidak cocok dengan kenyataan, yang salah adalah buku ini — perbaiki bukunya.
+
+## Cara pakai buku ini
+
+| Situasi kamu | Buka |
+|---|---|
+| Belum punya apa-apa, mau mulai dari nol | [01 Persiapan](/operasional/01-persiapan) lalu [02 Pemasangan](/operasional/02-pemasangan) |
+| Bingung isi file `.env` | [03 Konfigurasi](/operasional/03-konfigurasi-env) |
+| Mau update versi, restart, lihat log, rollback | [04 Operasi harian](/operasional/04-operasi-harian) |
+| Mau backup atau data hilang | [05 Backup dan restore](/operasional/05-backup-dan-restore) |
+| Mau tahu aplikasi sehat atau tidak | [06 Pemantauan](/operasional/06-pemantauan) |
+| Tugas rutin mingguan / bulanan / akhir trial | [07 Pemeliharaan](/operasional/07-pemeliharaan) |
+| **Ada yang rusak** | [08 Troubleshooting](/operasional/08-troubleshooting) — cari dari gejalanya |
+| Buat akun, reset password, organisasi, undangan, batas trial | [09 Pengelolaan pengguna](/operasional/09-pengelolaan-pengguna) |
+| Apa yang boleh dan tidak boleh soal keamanan | [10 Keamanan](/operasional/10-keamanan) |
+| Aplikasi mati / data bocor / data hilang — apa yang harus dilakukan sekarang | [11 Insiden](/operasional/11-insiden) |
+| Trial selesai — evaluasi, serah terima, atau bongkar | [12 Akhir trial](/operasional/12-akhir-trial) |
+| Cuma butuh perintahnya | [13 Referensi perintah](/operasional/13-referensi-perintah) |
+| Istilah yang tidak kamu kenal | [Glosarium](#glosarium) di bawah |
+
+## Gambaran besar (baca sekali)
+
+SkillPintar adalah **satu aplikasi web** (Next.js) yang jalan di **satu container Docker**. Aplikasi ini butuh tiga hal di luar dirinya:
+
+```
+                    internet
+                       │
+                 ┌─────▼─────┐
+                 │  Caddy    │  ← reverse proxy + HTTPS otomatis (port 80/443)
+                 └─────┬─────┘
+                       │  http://127.0.0.1:3000
+                 ┌─────▼─────────────────┐
+                 │  container skillpintar │  ← aplikasi (Docker, dari `make deploy`)
+                 └──┬────────────┬───────┘
+                    │            │
+            ┌───────▼──┐    ┌────▼─────┐
+            │ MongoDB  │    │  Redis   │
+            │ (data)   │    │ (sesi,   │
+            │          │    │  cache)  │
+            └──────────┘    └──────────┘
+```
+
+- **MongoDB** menyimpan semua data: akun, tes, soal, sesi ujian, hasil. **Ini yang wajib di-backup.**
+- **Redis** menyimpan hal yang boleh hilang: token yang sudah logout, cache izin, penghitung rate-limit. Kalau Redis kosong, semua orang cuma perlu login ulang.
+- **Caddy** (atau Nginx) menerima HTTPS dari internet dan meneruskannya ke container. Tidak ada di repo; kamu pasang sendiri (langkahnya di bab 02).
+- **Email** dikirim lewat layanan Resend (verifikasi akun, reset password, undangan). Tanpa ini, orang tidak bisa mendaftar sendiri — tapi ada jalan pintas di bab 09.
+
+Semua perintah dijalankan dari folder repo di server (`cd ~/skillpintar-nextjs`), lewat `make`. `make help` menampilkan daftar perintahnya.
+
+## Aturan emas
+
+1. **Backup dulu sebelum mengubah apa pun yang menyentuh data.** `make backup ENV=.env.prod`. Butuh 10 detik.
+2. **Jangan pernah set `ALLOW_TEST_ROUTES=1` di server yang dipakai orang.** Itu membuka pintu untuk **menghapus seluruh database** lewat satu request.
+3. **Jangan ganti `JWT_SECRET` / `JWT_REFRESH_SECRET` sembarangan.** Mengganti = semua orang logout. Boleh, tapi sengaja dan diumumkan.
+4. **Satu perubahan, satu langkah, cek hasilnya, baru langkah berikutnya.** Kalau dua hal diubah sekaligus dan rusak, kamu tidak tahu mana yang salah.
+5. **Catat.** Setiap deploy, restore, ganti env — tulis tanggal dan apa yang diubah di catatan operasional (file teks apa pun; contoh formatnya di bab 07).
+
+## Glosarium
+
+| Istilah | Artinya di buku ini |
+|---|---|
+| **VPS** | Server sewaan (mis. Sumopod 2 vCPU / 4 GB). Satu mesin Linux yang kamu akses lewat SSH. |
+| **SSH** | Cara masuk ke server lewat terminal: `ssh user@alamat-server`. |
+| **Docker** | Program yang menjalankan aplikasi di dalam "kotak" terpisah (container). Aplikasi ini jalan sebagai satu container. |
+| **Image** | "Cetakan" aplikasi versi tertentu. `make build_image` membuatnya; `make deploy` menjalankannya. Tiap versi punya tag, mis. `skillpintar-nextjs:v0.1.0-develop-build.20260921.1`. |
+| **Container** | Image yang sedang jalan. Namanya `skillpintar-nextjs-<APP_ENVIRONMENT>`, mis. `skillpintar-nextjs-prod`. |
+| **`.env` / `.env.prod`** | File teks berisi rahasia dan pengaturan (alamat database, kunci). Satu file per lingkungan. **Jangan pernah commit atau kirim lewat chat.** |
+| **Lingkungan (environment)** | `dev`, `staging`, `prod` — dipilih lewat `ENV=.env.<nama>` saat `make`. Untuk trial cukup satu: `prod`. |
+| **Reverse proxy** | Program di depan aplikasi yang mengurus HTTPS dan domain. Kami pakai Caddy. |
+| **MongoDB / Atlas** | Database. Atlas = MongoDB yang di-host oleh MongoDB Inc. (ada paket gratis). |
+| **Redis** | Penyimpanan cepat di memori untuk data sementara. |
+| **Health check** | Alamat `https://domain-kamu/api/health` — kalau membalas `{"status":"ok"}`, aplikasi hidup. |
+| **Log** | Catatan yang ditulis aplikasi saat jalan. `make show_logs`. Tempat pertama mencari penyebab masalah. |
+| **Rollback** | Kembali ke versi (image) sebelumnya karena versi baru bermasalah. `make rollback TAG=...`. |
+| **Creator** | Pengguna yang membuat tes (punya akun, login dengan password). |
+| **Tester / peserta** | Orang yang mengerjakan tes. Biasanya tidak punya akun — masuk lewat link tes publik atau undangan, berlaku 4 jam. |
+| **Organisasi** | "Perusahaan" di dalam aplikasi. Data tes dan soal dibatasi per organisasi. |
+| **Owner / Admin / Editor** | Peran di dalam organisasi. Owner = yang membuat organisasi. |
+| **Rate limit** | Pembatas: mis. maksimal 20 percobaan login gagal per alamat IP per 15 menit. Setelah itu dapat jawaban 429 sampai 15 menit berlalu. |
+| **Dev-only route** | Alamat `/api/v1/test/*` untuk pengujian otomatis. Mati di production. Jangan dinyalakan. |
+
+## Struktur folder buku ini
+
+```
+docs/operasional/
+  README.md                    ← kamu di sini
+  01-persiapan.md              apa yang harus disiapkan sebelum mulai
+  02-pemasangan.md             pasang dari nol sampai bisa dibuka di browser
+  03-konfigurasi-env.md        arti setiap baris di .env
+  04-operasi-harian.md         update, restart, log, rollback
+  05-backup-dan-restore.md     backup otomatis, restore, uji restore
+  06-pemantauan.md             cara tahu sehat/tidak
+  07-pemeliharaan.md           jadwal mingguan/bulanan, catatan operasional
+  08-troubleshooting.md        gejala → penyebab → solusi (T-01 … T-40)
+  09-pengelolaan-pengguna.md   akun, organisasi, undangan, batas trial
+  10-keamanan.md               aturan dan checklist
+  11-insiden.md                saat terjadi masalah besar
+  12-akhir-trial.md            evaluasi, serah terima, bongkar
+  13-referensi-perintah.md     cheat sheet
+```

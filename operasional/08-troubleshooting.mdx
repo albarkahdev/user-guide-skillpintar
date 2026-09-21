@@ -1,0 +1,458 @@
+---
+title: "08 — Troubleshooting: gejala → penyebab → solusi"
+sidebarTitle: "Troubleshooting"
+---
+Cari dari **gejala** di daftar isi, bukan dari dugaan penyebab. Setiap entri punya kode `T-xx` yang dirujuk bab lain. Sebelum apa pun: `make show_status ENV=.env.prod` dan `docker logs --since 30m skillpintar-nextjs-prod 2>&1 | tail -50` — 80% jawaban ada di sana.
+
+Kalau situs mati total dan orang sedang ujian: [11 Insiden §1](/operasional/11-insiden) dulu, bab ini belakangan.
+
+## Daftar isi
+
+**A. Container dan aplikasi**
+- [T-01 Container `unhealthy` / `Restarting` terus](#t-01)
+- [T-02 Login menjawab 500 "Internal server error"](#t-02)
+- [T-03 `make`: "Environment file '.env' not found"](#t-03)
+- [T-04 `make deploy`: "Image ... not found"](#t-04)
+- [T-07 `/api/v1/test/...` menjawab 404](#t-07)
+- [T-08 Health `ok` tapi situs lambat](#t-08)
+- [T-14 Log: "Database not connected. Call connect() first."](#t-14)
+
+**B. Redis dan MongoDB**
+- [T-05 Login/halaman lambat ±9 detik; log `redis error`](#t-05)
+- [T-06 Pengguna dapat 429 "Too many requests"](#t-06)
+- [T-09 Semua login langsung "kedaluwarsa" / token-revoked](#t-09)
+- [T-10 Log `MongoServerSelectionError`, `ECONNREFUSED 27017`, `Authentication failed`](#t-10)
+- [T-11 Data "hilang sebagian": tes ada, kursus/komentar tidak (atau sebaliknya)](#t-11)
+- [T-13 Log `ensureIndexes failed ... E11000 duplicate key`](#t-13)
+
+**C. Akun dan login**
+- [T-15 "Invalid email or password" padahal password benar](#t-15)
+- [T-16 Semua pengguna tiba-tiba logout](#t-16)
+- [T-17 Link di email mengarah ke `localhost` / domain salah](#t-17)
+- [T-18 Link undangan "expired" / "different email address"](#t-18)
+- [T-19 Anggota organisasi dapat 403 `ERROR_NOT_A_MEMBER`](#t-19)
+- [T-26 "Batas uji coba sudah tercapai" saat daftar / masuk tes / buat organisasi](#t-26)
+- [T-35 Halaman dashboard memantul terus ke halaman login](#t-35)
+
+**D. Email**
+- [T-12 Email verifikasi / reset password / undangan tidak sampai](#t-12)
+
+**E. Build, deploy, server**
+- [T-20 `make build_image` gagal](#t-20)
+- [T-21 "port is already allocated" / 3000 terpakai](#t-21)
+- [T-22 Disk penuh](#t-22)
+- [T-23 CPU 100% / server lambat](#t-23)
+- [T-24 `git pull` gagal: conflict / detached HEAD](#t-24)
+- [T-25 "Could not push tag" saat build](#t-25)
+
+**F. Domain dan HTTPS**
+- [T-30 502 Bad Gateway](#t-30)
+- [T-31 HTTPS tidak jadi / "connection not private"](#t-31)
+- [T-33 Bisa buka situs tapi tidak bisa login (cookie tidak tersimpan)](#t-33)
+
+**G. Fitur**
+- [T-36 Halaman beli/langganan menjawab 503](#t-36)
+- [T-37 Peserta tidak bisa submit jawaban (429)](#t-37)
+- [T-38 Webcam / rekaman layar tidak jalan saat ujian](#t-38)
+- [T-39 Link tes publik 404 / "not found"](#t-39)
+
+**H. Backup**
+- [T-40 Skrip backup error](#t-40)
+- [T-41 Uji restore gagal](#t-41)
+
+---
+
+## A. Container dan aplikasi
+
+<a id="t-01"></a>
+### T-01 Container `unhealthy` / `Restarting` terus
+
+**Gejala.** `make show_status` → `Restarting (1) 5 seconds ago` atau `(unhealthy)`; situs 502.
+
+**Cari penyebabnya.** `docker logs --since 10m skillpintar-nextjs-prod 2>&1 | tail -40`. Baris terakhir sebelum mati biasanya menyebutkan:
+
+| Baris log | Penyebab | Ke |
+|---|---|---|
+| `MongoServerSelectionError`, `ECONNREFUSED ...27017`, `getaddrinfo ENOTFOUND` | database tidak bisa dihubungi | T-10 |
+| `JWT_SECRET must be at least 32 characters` | secret pendek | T-02 |
+| `EADDRINUSE` | port di dalam container bentrok — hampir tidak mungkin; kalau ada, laporkan | — |
+| `JavaScript heap out of memory` / container mati tanpa pesan, `docker inspect` → `OOMKilled: true` | melewati batas 1 GB | §di bawah |
+| tidak ada log sama sekali | image rusak / `.env` tidak terbaca | cek `docker inspect skillpintar-nextjs-prod --format '{{.State.Error}}'`; ulangi `make deploy` |
+
+**OOM (kehabisan memori).** `docker inspect --format '{{.State.OOMKilled}}' skillpintar-nextjs-prod` → `true`. Restart dulu (`docker restart`). Kalau berulang dalam sehari, catat jam dan apa yang sedang dilakukan pengguna (ujian dengan banyak peserta?), lalu laporkan; sementara, batas bisa dinaikkan ke 1.5G di `docker-compose.yml` (`deploy.resources.limits.memory`) kalau RAM server cukup — lalu `make deploy`.
+
+**Health check gagal padahal aplikasi jalan.** `docker exec skillpintar-nextjs-prod wget -qO- http://localhost:3000/api/health` — kalau ini menjawab `ok` tapi status tetap unhealthy, tunggu 90 detik (3 × 30 s). Kalau menjawab lambat (>10 s), lihat T-05/T-10.
+
+<a id="t-02"></a>
+### T-02 Login menjawab 500 "Internal server error"
+
+**Gejala.** Halaman lain jalan; klik Login → "Internal server error". Log: `JWT_SECRET must be at least 32 characters` atau `requireSecret`.
+
+**Penyebab.** `JWT_SECRET` / `JWT_REFRESH_SECRET` di `.env.prod` kurang dari 32 karakter atau kosong. Aplikasi sengaja menolak (ADR-0013). Tidak terlihat saat start karena dicek saat pertama dipakai.
+
+**Solusi.** Bab 03 C — isi dengan `openssl rand -base64 48` (dua nilai berbeda), `make deploy ENV=.env.prod`. Semua orang login ulang (mereka memang belum bisa login).
+
+<a id="t-03"></a>
+### T-03 `make`: "Environment file '.env' not found"
+
+**Penyebab.** Lupa `ENV=.env.prod`. Tanpa itu `make` mencari `.env`.
+
+**Solusi.** Tambahkan `ENV=.env.prod` di setiap perintah `make ...`. Atau, kalau hanya ada satu lingkungan di server ini: `ln -s .env.prod .env` sekali, lalu `ENV=` tidak perlu lagi.
+
+<a id="t-04"></a>
+### T-04 `make deploy`: "Image 'skillpintar-nextjs:latest' not found"
+
+**Penyebab.** Belum pernah `make build_image` + `make tag_latest` di server ini, atau image terhapus oleh `cleanup_old_images` / `docker system prune -a`.
+
+**Solusi.** `make list_images`. Kalau ada versi: `make tag_latest TAG=<versi>` lalu deploy. Kalau kosong: `make build_image && make tag_latest && make deploy ENV=.env.prod`.
+
+<a id="t-07"></a>
+### T-07 `/api/v1/test/...` menjawab 404
+
+**Bukan masalah.** Route pengujian sengaja dimatikan di production oleh middleware dan oleh tiap handler. Jangan menyalakannya (`ALLOW_TEST_ROUTES`) di server yang dipakai orang — bab 10 §1.
+
+<a id="t-08"></a>
+### T-08 Health `ok` tapi situs lambat
+
+**Urutan cek.**
+1. `docker stats --no-stream skillpintar-nextjs-prod` — CPU di 50% terus = mentok di batas `cpus: "0.5"`. Kalau server punya 2 vCPU dan tidak ada beban lain, naikkan ke `"1.0"` di `docker-compose.yml`, `make deploy`.
+2. `curl -o /dev/null -s -w '%{time_total}\n' http://127.0.0.1:3000/api/health` — > 2 s padahal beban rendah → Redis (T-05) atau Mongo jauh/lambat (T-10; region Atlas bukan Singapura?).
+3. Halaman tertentu saja yang lambat (mis. daftar sesi tes dengan ribuan baris) → indeks; pastikan versi ≥ RFC-0003. Kalau sudah, laporkan halaman mana.
+4. Semua lambat, `uptime` load > 2 → T-23.
+
+<a id="t-14"></a>
+### T-14 Log: "Database not connected. Call connect() first."
+
+**Penyebab.** Versi sebelum QA2 (2026-09-21): route `test/db/seed|clean` dipanggil sebagai request pertama setelah start. Di production route itu 404, jadi hampir tidak mungkin terlihat. Kalau muncul dari route lain: bug — laporkan dengan log lengkap.
+
+---
+
+## B. Redis dan MongoDB
+
+<a id="t-05"></a>
+### T-05 Login/halaman lambat ±9 detik; log `redis error` / `ECONNREFUSED 6379` / `getaddrinfo ENOTFOUND ...upstash.io`
+
+**Penyebab.** Aplikasi tidak bisa menghubungi Redis. Ia **tidak** mati — setiap operasi yang butuh Redis (cek token logout, rate-limit, cache izin) menunggu koneksi gagal dulu lalu melanjutkan tanpa Redis ("fail open"). Itu yang terasa sebagai 9 detik.
+
+**Cek.**
+```bash
+grep -E '^(REDIS_URL|UPSTASH_REDIS_REST_URL)=' .env.prod
+docker ps | grep redis            # skillpintar-redis Up?
+docker exec skillpintar-redis redis-cli ping
+docker exec skillpintar-nextjs-prod wget -qO- --timeout=3 http://host.docker.internal:6379 2>&1 | head -2   # "connection" apa pun selain timeout = terjangkau
+```
+
+**Solusi.**
+- Redis mati: `docker start skillpintar-redis`. Kalau containernya tidak ada, buat lagi (bab 02 §5).
+- `REDIS_URL` kosong dan `UPSTASH_*` menunjuk ke instance yang sudah dihapus: isi `REDIS_URL=redis://host.docker.internal:6379`, kosongkan Upstash, `make deploy`.
+- `REDIS_URL` memakai `localhost` atau `127.0.0.1`: dari dalam container itu berarti container itu sendiri, bukan server. Ganti ke `host.docker.internal`.
+- Redis jalan tapi `-p 6379:6379` tanpa `127.0.0.1:` dan `ufw` memblokir? Tidak — `host.docker.internal` lewat jembatan Docker, bukan ufw. Tapi pastikan Redis tidak terbuka ke internet: `ss -tlnp | grep 6379` harus `127.0.0.1:6379`.
+
+**Dampak selama Redis mati.** Logout tidak langsung "menggigit" (token lama laku ≤1 jam), rate-limit login tidak bekerja. Perbaiki hari itu juga.
+
+<a id="t-06"></a>
+### T-06 Pengguna dapat 429 "Too many requests"
+
+**Penyebab.** Rate-limit: login gagal 20×/IP atau 10×/email dalam 15 menit; daftar/lupa-password 10/IP, 3/email; submit jawaban 5×/menit per sesi. Satu kantor di belakang satu IP publik bisa kena batas IP bersama-sama saat 20 orang salah password.
+
+**Solusi cepat.** Tunggu 15 menit. Atau hapus penghitungnya:
+```bash
+docker exec skillpintar-redis redis-cli --scan --pattern 'ratelimit:login:*' | xargs -r docker exec -i skillpintar-redis redis-cli del
+```
+(ganti `login` dengan `register`, `forgot-password`, dst. sesuai yang terkena). Kalau satu kantor besar akan ujian bersamaan dan semua login lewat satu IP, angka 20/IP bisa jadi sempit — laporkan ke pengembang untuk dinaikkan (`src/app/api/v1/auth/authRateLimit.ts`), jangan matikan.
+
+<a id="t-09"></a>
+### T-09 Semua login langsung "kedaluwarsa" / `token-revoked` / dashboard memantul
+
+**Penyebab yang sering.** **Jam server salah.** Token punya waktu berlaku; kalau jam server maju/mundur berjam-jam, token dianggap kedaluwarsa atau belum berlaku.
+
+**Cek.** `date` di server vs jam sebenarnya; `timedatectl` → `System clock synchronized: yes`.
+
+**Solusi.** `sudo timedatectl set-ntp true`, `sudo systemctl restart systemd-timesyncd`, tunggu 1 menit, `date` lagi. Lalu `docker restart skillpintar-nextjs-prod`.
+
+Kalau jam benar: T-16.
+
+<a id="t-10"></a>
+### T-10 Log `MongoServerSelectionError`, `ECONNREFUSED 27017`, `Authentication failed`, `getaddrinfo ENOTFOUND cluster0...`
+
+Aplikasi tidak bisa ke database → hampir semua halaman 500, container mungkin restart (T-01).
+
+| Pesan | Penyebab | Solusi |
+|---|---|---|
+| `MongoServerSelectionError ... ReplicaSetNoPrimary` / timeout ke `*.mongodb.net` | IP server **tidak di-allowlist** Atlas (paling sering — juga setelah IP VPS berubah) | Atlas → Network Access → Add IP → IP publik server (`curl -s ifconfig.me`) |
+| `Authentication failed` | user/password salah, atau password mengandung `@ : / %` tanpa encoding | Cek Atlas → Database Access; ganti password ke huruf-angka saja; perbarui `MONGODB_URI` |
+| `getaddrinfo ENOTFOUND` | nama cluster salah, atau DNS server bermasalah (`nslookup cluster0.xxxxx.mongodb.net`) | perbaiki URI; kalau DNS server mati: `sudo systemctl restart systemd-resolved` |
+| `ECONNREFUSED 127.0.0.1:27017` atau `host.docker.internal:27017` | opsi B: container Mongo mati, atau URI memakai `localhost` dari dalam container | `docker start skillpintar-mongo`; URI harus `host.docker.internal` |
+| `not authorized on skillpintar` | user Atlas hanya punya hak baca | Database Access → role `readWrite` pada database itu |
+| berjalan, lalu putus-putus | Atlas M0 dijeda karena tidak aktif >60 hari? (jarang, tapi ada) / jaringan VPS | Atlas → Resume; cek `ping 8.8.8.8` dari server |
+
+Setelah memperbaiki: `docker restart skillpintar-nextjs-prod`, lihat log sampai `MongoDB connected (PROD)`.
+
+<a id="t-11"></a>
+### T-11 Data "hilang sebagian": tes ada tapi kursus/komentar/lencana tidak (atau sebaliknya), atau setelah pindah server data "tidak lengkap"
+
+**Penyebab (versi sebelum 2026-09-21).** `MONGODB_DB` tidak sama dengan nama database di `MONGODB_URI`. Sebagian modul membaca `MONGODB_DB` (kursus, my-courses, komentar, lencana, profil publik, rekomendasi dashboard), sebagian dari URI. Hasilnya dua database terisi separuh-separuh. **Sudah diperbaiki**: semua modul kini memakai nama dari URI, `MONGODB_DB` tidak dibaca.
+
+**Kalau masih terjadi setelah update.** Data lama yang sempat masuk ke database "yang lain" masih di sana. Cek dengan `mongosh`: `show dbs` → ada dua database dengan isi mirip? Pindahkan koleksi yang tertinggal dengan `mongodump --db LAMA --collection X` lalu `mongorestore --nsFrom 'LAMA.X' --nsTo 'BARU.X'` — minta bantuan pengembang; jangan tebak-tebak.
+
+**Penyebab lain.** `MONGODB_URI` tanpa nama database → semuanya masuk database `test`. Tambahkan nama database di URI (bab 03 D), `make deploy`; data di `test` dipindahkan dengan cara di atas.
+
+<a id="t-13"></a>
+### T-13 Log `ensureIndexes failed ... E11000 duplicate key error collection: skillpintar.roles index: id_1 dup key: { id: null }`
+
+**Penyebab.** Ada dokumen ganda (atau tanpa `id`) di koleksi yang seharusnya unik, jadi indeks unik tidak bisa dibuat. Aplikasi **tetap jalan**; pesan ini muncul lagi setiap kali koleksi itu disentuh setelah restart. Kasus yang diketahui: `roles` berisi dokumen kosong sisa seed lama.
+
+**Solusi.** Cari dulu dengan skrip (dari laptop yang punya `bun`, atau lewat container bun seperti di bab 04 §4):
+```bash
+MONGODB_URI=... bun run scripts/check-index-preconditions.ts
+```
+Ia menyebutkan koleksi dan kuncinya. Untuk `roles` tanpa `id`, setelah `make backup`:
+```js
+db.roles.deleteMany({ id: { $exists: false } })
+```
+Untuk duplikat sungguhan (dua user dengan email sama, dsb.) — jangan hapus sendiri; laporkan dengan hasil skrip.
+
+---
+
+## C. Akun dan login
+
+<a id="t-15"></a>
+### T-15 "Invalid email or password" padahal pengguna yakin benar
+
+Urutan kemungkinan, dari yang paling sering:
+
+1. **Email belum diverifikasi.** Pesannya sebenarnya berbeda ("Please verify your email"), tapi pengguna sering membacanya sama. Cek di database: `db.users.findOne({email:"x@y.com"},{emailVerified:1})`. Kalau `false`: kirim ulang verifikasi (halaman login ada tombolnya), atau verifikasi manual (bab 09 §2).
+2. **Email dengan huruf besar / spasi.** Aplikasi menyimpan huruf kecil dan memangkas spasi; kalau pengguna mengetik `Nama@Kantor.id` tetap cocok. Tapi kalau akun dibuat manual lewat `mongosh` dengan huruf besar, tidak cocok — perbaiki di database.
+3. **Akun tamu dengan email itu.** Kalau orang itu pernah mengerjakan tes publik dengan email yang sama, ada `users` dengan `isGuest: true` **tanpa password**. Pendaftaran akan menimpanya dengan benar; tapi kalau pendaftaran tidak pernah selesai, login memang gagal. Solusi: daftar ulang dengan email yang sama (dibolehkan untuk akun tamu).
+4. **Lupa password sungguhan.** Halaman `/auth/forgot-password` → email (T-12 kalau tidak sampai) → atau reset manual (bab 09 §3).
+5. **Rate-limit** 429, bukan 401 — T-06.
+
+<a id="t-16"></a>
+### T-16 Semua pengguna tiba-tiba logout
+
+**Penyebab.**
+- `JWT_SECRET` / `JWT_REFRESH_SECRET` diganti (sengaja atau `.env.prod` ditimpa dari contoh). Semua token lama tidak sah. Ini yang diharapkan — umumkan.
+- Update ke versi dengan ADR-0013 (2026-09-21) — satu kali login ulang, sudah tercatat.
+- Jam server (T-09).
+
+**Yang BUKAN penyebab.** Redis dihapus/di-restart — itu tidak me-logout siapa pun (justru sebaliknya: yang sudah logout bisa "hidup" lagi ≤1 jam).
+
+<a id="t-17"></a>
+### T-17 Link di email mengarah ke `http://localhost:3000/...` atau domain salah
+
+**Penyebab.** `NEXT_PUBLIC_APP_BASE_URL` (verifikasi, reset) atau `NEXT_PUBLIC_APP_URL` (undangan) belum diganti dari contoh.
+
+**Solusi.** Bab 03 B, `make deploy`. Link yang sudah terkirim tetap salah; minta pengguna kirim ulang (tombol "resend"), atau ganti bagian domainnya manual saat membuka.
+
+<a id="t-18"></a>
+### T-18 Link undangan organisasi: "expired", "already accepted", "different email address"
+
+| Pesan | Artinya | Solusi |
+|---|---|---|
+| `Invalid or expired invitation` | token salah/kedaluwarsa (undangan email berlaku terbatas; link umum punya masa berlaku sendiri) atau sudah dicabut | buat undangan baru dari Settings → Organization |
+| `already accepted` | sudah pernah diklik dan berhasil | pengguna sudah anggota; minta login lalu pilih organisasi di menu |
+| `different email address` | undangan ke email A, yang login email B | login dengan A, atau undang B |
+| `already a member` | sudah anggota aktif | tidak perlu apa-apa |
+
+<a id="t-19"></a>
+### T-19 Anggota organisasi dapat 403 `ERROR_NOT_A_MEMBER` / data organisasi tidak muncul
+
+**Penyebab.** Browser masih "memilih" organisasi yang ia bukan anggotanya (disimpan di browser), atau keanggotaannya belum aktif (undangan belum diterima), atau baru saja dicabut. Ada cache 1 jam: setelah diterima/dicabut, aplikasi menghapus cache sendiri; kalau tidak, tunggu ≤1 jam.
+
+**Solusi.** Pengguna: ganti organisasi di menu / logout-login. Operator: `db["organization-collaborators"].find({userId:"...", organizationId:"..."},{status:1})` → harus `active`. Paksa segarkan cache: `docker exec skillpintar-redis redis-cli del "org-membership:<userId>:<orgId>" "access-rbac-permissions:<userId>:<orgId>"`.
+
+<a id="t-26"></a>
+### T-26 "Batas uji coba sudah tercapai. Silakan hubungi penyelenggara." (403 `ERROR_TRIAL_LIMIT_REACHED`)
+
+**Bukan kerusakan.** Salah satu `TRIAL_MAX_*` (bab 03 B) sudah terpakai penuh: creator saat mendaftar, peserta saat email **baru** masuk tes, organisasi saat dibuat. Peserta yang sudah pernah masuk tidak pernah kena.
+
+**Cek angkanya:** `bun run scripts/trial-report.ts` (bab 09 §7) — baris dengan `<-- AT LIMIT`.
+
+**Solusi.** Keputusan pemilik produk: naikkan angkanya di `.env.prod`, `make deploy ENV=.env.prod`. Aplikasi membaca batas baru dalam ±1 menit (cache 60 detik) tanpa perlu apa-apa lagi. Kalau batasnya memang tidak boleh naik: sampaikan ke yang bertanya.
+
+<a id="t-35"></a>
+### T-35 Halaman dashboard memantul terus ke halaman login
+
+**Penyebab.** Cookie tidak tersimpan/terkirim: situs dibuka lewat `http://` bukan `https://` (cookie `secure`), atau lewat IP/port langsung (`http://IP:3000`) bukan domain, atau jam server (T-09), atau ekstensi browser yang memblokir cookie.
+
+**Solusi.** Selalu lewat `https://domain`. Pastikan port 3000 tidak terbuka dari luar (`ufw`), supaya tidak ada yang memakai jalur itu. Kalau jam benar dan HTTPS benar: coba browser lain/incognito; kalau di sana jalan, masalah di browser pengguna.
+
+---
+
+## D. Email
+
+<a id="t-12"></a>
+### T-12 Email verifikasi / reset password / undangan tidak sampai
+
+**Urutan cek.**
+1. Log aplikasi saat pengguna klik: `docker logs --since 10m skillpintar-nextjs-prod 2>&1 | grep -i -A5 "resend\|email"`.
+   - `Missing RESEND_API_KEY` → isi `.env.prod` (bab 03 F), `make deploy`.
+   - `401`/`403` dari Resend → API key salah/dicabut.
+   - `422 ... domain is not verified` / `from address` → `ACCOUNT_FROM_EMAIL` bukan di domain yang diverifikasi. Perbaiki di Resend atau ganti alamatnya.
+   - `429` → kuota harian Resend (100/hari gratis) habis. Tunggu besok atau upgrade.
+2. Dashboard Resend → **Logs**: emailnya ada? Status `delivered`? Kalau `bounced` → alamat salah. Kalau `delivered` tapi tidak terlihat → **folder spam** pengguna; minta cek, tandai "bukan spam".
+3. Tidak ada di log Resend sama sekali → aplikasi tidak memanggil; log aplikasi (langkah 1) harus menjelaskan.
+4. Sementara menunggu perbaikan: verifikasi/reset manual (bab 09 §2, §3).
+
+Pencegahan: domain Resend harus `Verified` sebelum trial (bab 01 §5); kirim email uji ke Gmail dan Outlook dan cek keduanya masuk inbox.
+
+---
+
+## E. Build, deploy, server
+
+<a id="t-20"></a>
+### T-20 `make build_image` gagal
+
+Lihat 30 baris terakhir keluarannya.
+
+| Terlihat | Penyebab | Solusi |
+|---|---|---|
+| `Killed`, `exit code 137`, berhenti di `bun run build` tanpa pesan | kehabisan RAM saat build (butuh ~1,5 GB bebas) | hentikan yang tidak perlu (`docker stop` container lain sementara), atau tambah swap 2 GB: `sudo fallocate -l 2G /swapfile && sudo chmod 600 /swapfile && sudo mkswap /swapfile && sudo swapon /swapfile` (permanen: tambahkan `/swapfile none swap sw 0 0` ke `/etc/fstab`); ulangi build |
+| `lockfile had changes, but lockfile is frozen` | `bun.lock` tidak cocok dengan `package.json` — kode di repo tidak konsisten | jangan diperbaiki di server; laporkan ke pengembang (biasanya `bun install` lalu commit lockfile) |
+| `error: failed to resolve` / `ENOTFOUND registry.npmjs.org` | server tidak bisa ke internet / DNS | `curl -I https://registry.npmjs.org`; T-10 baris DNS |
+| `Type error:` / `Failed to compile` | kode di branch rusak | jangan deploy; laporkan commit-nya (`git log -1`) |
+| `No space left on device` | disk penuh | T-22 |
+| `permission denied ... docker.sock` | user tidak di grup docker | `sudo usermod -aG docker $USER`, logout-login |
+
+Build yang gagal **tidak** mengubah versi yang sedang jalan — situs tetap hidup.
+
+<a id="t-21"></a>
+### T-21 `make deploy`: "Bind for 0.0.0.0:3000 failed: port is already allocated"
+
+**Penyebab.** Ada proses/container lain di port 3000 — biasanya container lama dengan nama proyek berbeda (mis. `APP_ENVIRONMENT` berubah dari `dev` ke `prod` sehingga Docker menganggapnya proyek baru).
+
+**Cek.** `docker ps --format '{{.Names}} {{.Ports}}' | grep 3000`; `sudo ss -tlnp | grep :3000`.
+
+**Solusi.** Hentikan dan hapus yang lama: `docker rm -f <nama-lama>`. Atau pakai port lain: `DOCKER_EXPOSED_PORT=3001` di `.env.prod` **dan** ubah `reverse_proxy 127.0.0.1:3001` di Caddyfile, `sudo systemctl reload caddy`.
+
+<a id="t-22"></a>
+### T-22 Disk penuh (`No space left on device`, `df -h` > 90%)
+
+Urutan, dari yang paling aman:
+```bash
+df -h /
+docker system df                       # siapa yang makan
+make cleanup_old_images                 # image lama
+docker system prune -f                  # layer build, container mati, network
+docker builder prune -af                # cache build (bisa beberapa GB)
+sudo journalctl --vacuum-time=14d       # log sistem
+du -sh ~/skillpintar-nextjs/backups     # backup lokal: kurangi BACKUP_KEEP_DAYS kalau besar
+sudo du -xh / --max-depth=2 2>/dev/null | sort -rh | head -15   # kalau masih penuh, cari
+```
+Jangan hapus `~/mongo-data` (opsi B) atau `backups/` tanpa memastikan ada salinan di luar.
+
+<a id="t-23"></a>
+### T-23 CPU 100% / server lambat
+
+`top` atau `htop` → proses mana?
+- `node` di container aplikasi mendekati 50% terus (batasnya) → T-08 poin 1.
+- `docker build`/`bun` → build sedang jalan; tunggu.
+- `mongod` (opsi B) → query berat; pastikan versi ≥ RFC-0003 (indeks); cek `db.currentOp()`.
+- proses tak dikenal dengan nama aneh, CPU tinggi, sejak kapan? → kemungkinan server disusupi (penambang kripto). **Bab 11 §4 sekarang.**
+
+<a id="t-24"></a>
+### T-24 `git pull` gagal: "Your local changes would be overwritten" / conflict / detached HEAD
+
+**Penyebab.** Ada perubahan lokal di server (tidak seharusnya: server hanya membaca kode). Atau sedang di tag (`git checkout v1.2.0` → detached HEAD), lalu `git pull` bingung.
+
+**Solusi.**
+```bash
+git status                       # lihat apa yang berubah; kalau hanya .env.* atau backups/, itu diabaikan git dan bukan penyebabnya
+git stash                        # simpan perubahan lokal kalau ragu (bisa dilihat lagi: git stash list)
+git checkout develop && git pull
+```
+Kalau `docker-compose.yml` atau `Makefile` sengaja diubah di server (mis. batas memori), catat perubahannya, `git stash`, pull, lalu terapkan lagi — dan minta pengembang memasukkannya ke repo supaya tidak berulang.
+
+<a id="t-25"></a>
+### T-25 Saat build: "⚠️ Warning: Could not push tag (may be running locally)"
+
+**Bukan kegagalan.** Image sudah jadi. Tag versi hanya tidak terkirim ke GitHub karena deploy key tanpa hak tulis. Kalau ingin tag tercatat di GitHub, beri deploy key hak "Allow write access" (bab 01 §8).
+
+---
+
+## F. Domain dan HTTPS
+
+<a id="t-30"></a>
+### T-30 502 Bad Gateway
+
+Caddy jalan, tapi aplikasi di belakangnya tidak menjawab.
+
+1. `make show_status ENV=.env.prod` → container `Up (healthy)`? Kalau tidak: T-01.
+2. `curl -s http://127.0.0.1:3000/api/health` dari server → `ok`? Kalau tidak: aplikasi. Kalau ya: Caddy salah alamat/port — `cat /etc/caddy/Caddyfile` harus `reverse_proxy 127.0.0.1:3000` (atau port `DOCKER_EXPOSED_PORT`).
+3. `sudo journalctl -u caddy --since "10 min ago"`.
+4. Baru saja `make deploy`? 502 selama ±40 detik itu normal.
+
+<a id="t-31"></a>
+### T-31 HTTPS tidak jadi / browser: "connection is not private" / Caddy log `obtaining certificate ... failed`
+
+| Penyebab | Cek | Solusi |
+|---|---|---|
+| DNS belum mengarah ke server | `dig +short skillpintar.contoh.id` = IP server? | tunggu propagasi (sampai 1 jam), perbaiki A record |
+| Port 80/443 tertutup (Caddy butuh 80 untuk verifikasi Let's Encrypt) | `sudo ufw status`; firewall penyedia VPS (panel Sumopod) | buka 80 dan 443 di keduanya |
+| Caddy tidak jalan | `sudo systemctl status caddy` | `sudo systemctl restart caddy`; kesalahan sintaks Caddyfile → `caddy validate --config /etc/caddy/Caddyfile` |
+| Terlalu sering mencoba (rate limit Let's Encrypt) | log `too many certificates` | tunggu 1 jam–1 minggu; jangan restart Caddy berulang-ulang |
+| Domain memakai proxy Cloudflare (awan oranye) | | matikan proxy (awan abu-abu) atau atur SSL mode "Full (strict)" — paling mudah: abu-abu |
+
+<a id="t-33"></a>
+### T-33 Bisa buka situs, tapi login tidak "nyantol" (kembali ke halaman login tanpa error)
+
+Sama dengan T-35. Hampir selalu: dibuka bukan lewat `https://domain`.
+
+---
+
+## G. Fitur
+
+<a id="t-36"></a>
+### T-36 Halaman beli kredit / langganan menjawab 503 "Payments are not enabled"
+
+**Disengaja.** `PAYMENT_PROVIDER` kosong = mode mock yang ditolak di production. Selama trial gratis, biarkan. Untuk mengaktifkan pembayaran: RFC-0004 (butuh akun Stripe).
+
+<a id="t-37"></a>
+### T-37 Peserta tidak bisa submit jawaban, "too many requests"
+
+**Penyebab.** Pembatas submit 5×/menit per sesi — melindungi dari klik ganda/skrip. Peserta yang menekan tombol berkali-kali karena koneksi lambat bisa terkena.
+
+**Solusi.** Minta tunggu 1 menit lalu submit sekali. Jawaban per pertanyaan tersimpan otomatis, tidak hilang. Kalau sering terjadi pada peserta yang wajar, laporkan (angkanya di `src/lib/repositories/test-session/rateLimit.ts`).
+
+<a id="t-38"></a>
+### T-38 Webcam / rekaman layar / mikrofon tidak jalan saat ujian
+
+Bukan server: ini izin browser di komputer peserta.
+- Harus lewat **HTTPS** (browser menolak kamera di HTTP) — sudah, kalau lewat domain.
+- Peserta menolak izin saat diminta → klik ikon gembok di address bar → izinkan kamera/mikrofon → muat ulang.
+- Browser lama / Safari versi lama / browser bawaan WebView (dibuka dari dalam aplikasi chat) → pakai Chrome/Edge/Firefox terbaru.
+- Kamera dipakai aplikasi lain (Zoom) → tutup.
+- Rekaman layar di macOS butuh izin sistem: System Settings → Privacy → Screen Recording → browser.
+
+<a id="t-39"></a>
+### T-39 Link tes publik 404 / "Test not found" / tidak bisa mulai
+
+- Tes harus berstatus **ACTIVE** dan akses **PUBLIC** (untuk link umum) — cek di dashboard creator; draft tidak bisa dibuka peserta.
+- Link undangan (bukan publik) hanya untuk email yang diundang; peserta lain → 403.
+- Tes sudah dihapus (soft delete) → creator bisa memulihkan di "My Tests".
+- Link ditempel terpotong (id pendek) → minta salin ulang.
+
+---
+
+## H. Backup
+
+<a id="t-40"></a>
+### T-40 Skrip backup error
+
+| Pesan | Solusi |
+|---|---|
+| `backup: env file not found` | path `.env.prod` salah di cron; gunakan path absolut atau `cd` dulu (contoh di bab 05 §2) |
+| `backup: MONGODB_URI is empty` | baris `MONGODB_URI=` kosong/berkomentar di `.env.prod` |
+| `backup: archive is empty or missing` | `mongodump` gagal — jalankan manual `./scripts/backup-mongo.sh .env.prod ./backups` untuk melihat pesannya; biasanya T-10 (allowlist/password) |
+| `Unable to find image 'mongo:7'` + gagal pull | server tidak bisa ke Docker Hub; cek internet/DNS |
+| `permission denied` menulis `./backups` | `chown -R $USER ~/skillpintar-nextjs/backups` |
+| cron tidak menulis apa-apa ke `~/backup.log` | `crontab -l` sebagai user yang benar; `systemctl status cron`; PATH di cron minim — skrip memakai `docker` yang ada di `/usr/bin`, aman |
+
+<a id="t-41"></a>
+### T-41 Uji restore gagal
+
+- `restore: usage` → path arsip salah/kosong.
+- Container `restore-test` belum siap (`ECONNREFUSED 27018`) → `sleep 10` lalu ulangi.
+- `restore: cannot tell which database the archive holds` → file pendamping `…archive.gz.db` (dibuat oleh skrip backup, berisi nama database asal) tidak ikut tersalin. Salin juga, atau beri tahu namanya: `./scripts/restore-mongo.sh ARSIP .env.prod --from-db SkillPintarDev`. Skrip otomatis memetakan nama database arsip ke nama database di `MONGODB_URI` tujuan, jadi beda nama bukan masalah.
+- Restore "sukses" tapi jumlah dokumen 0 → cek `show dbs` di `mongosh` uji; kalau datanya masuk ke database bernama lain, `--from-db` yang diberikan salah.
+- Arsip korup (`gzip: invalid`) → arsip terpotong saat disalin; ambil ulang dari server.

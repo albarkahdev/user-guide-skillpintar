@@ -1,0 +1,106 @@
+---
+title: "11 — Insiden: apa yang dilakukan saat terjadi masalah besar"
+sidebarTitle: "Insiden"
+---
+"Insiden" = pengguna tidak bisa memakai aplikasi, atau data terancam. Bab ini untuk 30 menit pertama. Bacanya urut, jangan lompat ke perbaikan sebelum §1 poin 1–3.
+
+## 0. Aturan saat panik
+
+- **Satu orang memegang kendali.** Kalau ada dua orang, yang satu mengetik, yang lain mencatat dan berkomunikasi.
+- **Catat jam** setiap langkah (ketik di catatan operasional atau chat pribadi). Nanti dibutuhkan.
+- **Jangan menghapus apa pun.** Restart boleh. Hapus tidak.
+- **Jangan restore database** sebelum §3.
+- Komunikasi ke pengguna lebih baik singkat dan cepat daripada lengkap dan lambat: "Aplikasi sedang bermasalah sejak 10:05, kami menangani, kabar berikutnya jam 10:35."
+
+## 1. Aplikasi mati / tidak bisa dibuka (dari UptimeRobot atau laporan)
+
+```bash
+ssh user@server
+cd ~/skillpintar-nextjs
+make show_status ENV=.env.prod                       # 1. container hidup? healthy?
+curl -s http://127.0.0.1:3000/api/health             # 2. aplikasi menjawab dari dalam server?
+sudo systemctl is-active caddy                       # 3. Caddy hidup?
+docker logs --since 15m skillpintar-nextjs-prod 2>&1 | tail -60   # 4. apa kata log
+```
+
+| Hasil | Lakukan |
+|---|---|
+| Tidak bisa SSH | Server mati/jaringan: cek panel penyedia VPS (Sumopod) → status, console, restart dari panel. Kalau server hilang: §5. |
+| Container `Restarting`/`unhealthy` | T-01. Restart dulu: `docker restart skillpintar-nextjs-prod`, tunggu 60 detik, cek lagi. Kalau tetap: baca log → T-02/T-05/T-10. |
+| Container `Up (healthy)`, `curl` ok, Caddy `inactive` | `sudo systemctl restart caddy`. T-30/T-31. |
+| Semua hidup, tapi dari luar mati | DNS/jaringan penyedia: `dig +short domain` dari laptop; panel VPS → firewall; status halaman penyedia. |
+| Baru saja `make deploy` | rollback ke versi sebelumnya ([04 §6](/operasional/04-operasi-harian)) — jangan debug dulu. |
+| Baru saja ubah `.env.prod` | kembalikan nilai lama (dari password manager / `git diff` tidak berlaku untuk .env — pakai catatan operasional), `make deploy`. |
+
+Setelah hidup lagi: kabari pengguna, lalu isi §6.
+
+Kalau dalam 20 menit tidak hidup dan **ada orang sedang ujian**: beri tahu perusahaan bahwa sesi yang sedang berjalan tersimpan per jawaban — peserta bisa melanjutkan setelah aplikasi hidup (waktu tes tetap berjalan, kecuali creator memperpanjang/mengulang). Jangan menjanjikan lebih.
+
+## 2. Aplikasi hidup tapi "salah" (error di fitur tertentu, data aneh)
+
+1. Reproduksi: minta langkah persis, browser, jam, email pengguna. Coba sendiri.
+2. `docker logs --since 1h ... | grep -B5 -A15 "Error"` di sekitar jam kejadian.
+3. Cocokkan dengan bab 08. Kalau ketemu: perbaiki, uji, kabari.
+4. Kalau tidak ketemu dan mulai setelah deploy: rollback.
+5. Kalau tidak ketemu dan bukan setelah deploy: kumpulkan (log, langkah, versi, catatan) → kirim ke pengembang. Jangan mengubah data untuk "menyembuhkan" gejala.
+
+## 3. Data hilang / rusak — memutuskan restore atau tidak
+
+Pertanyaan yang harus dijawab **sebelum** restore:
+
+1. **Apa yang hilang, milik siapa, sejak kapan?** Cek di `mongosh` ([04 §9](/operasional/04-operasi-harian)): dokumennya benar-benar tidak ada, atau hanya tidak terlihat (mis. T-11 database terpecah, T-19 organisasi salah, soft delete `deletedAt`)? Sebagian besar "data hilang" ternyata masih ada.
+2. **Kapan backup terakhir yang masih benar?** `make backup_list`. Backup jam 03:00 hari ini berarti restore membuang semua yang dibuat sejak jam 03:00 — oleh **semua** pengguna, bukan cuma yang bermasalah.
+3. **Berapa banyak yang akan hilang karena restore?** `db["test-sessions"].countDocuments({ createdAt: { $gte: new Date("2026-09-21T03:00:00+07:00") } })`, sama untuk `tests`, `users`.
+
+Keputusan:
+- Yang hilang kecil dan milik satu orang, yang dibuat sejak backup banyak → **jangan restore seluruh database.** Minta pengembang memulihkan koleksi/dokumen itu saja dari arsip (mongorestore per namespace).
+- Kerusakan luas (banyak koleksi, banyak pengguna) dan baru terjadi → restore ([05 §4](/operasional/05-backup-dan-restore)), setelah `make backup` keadaan sekarang (siapa tahu ada yang bisa digabung nanti).
+- Ragu → tidak restore, kumpulkan fakta, tanya pengembang. Restore yang salah lebih merusak daripada menunggu satu jam.
+
+Selalu umumkan rentang waktu yang hilang ke semua pengguna.
+
+## 4. Dugaan penyusupan (server disusupi / akun dibajak / rahasia bocor)
+
+1. **Isolasi**: `sudo ufw deny 80 && sudo ufw deny 443` (situs mati, tapi penyusup juga). SSH tetap.
+2. **Jangan matikan server** (bukti hilang). `docker stop skillpintar-nextjs-prod` boleh.
+3. Backup sekarang ke arsip dengan nama berbeda: `./scripts/backup-mongo.sh .env.prod ./backups-insiden`.
+4. Ganti semua rahasia ([10 §2](/operasional/10-keamanan)): password Mongo (dan allowlist Atlas hanya IP server), `JWT_*`, Resend key, kunci SSH yang tidak dikenal dihapus dari `authorized_keys`.
+5. Cari jejak: `last -50`, `sudo journalctl -u ssh --since "7 days ago" | grep -i accepted`, `crontab -l`, `ls -la /etc/cron.d /tmp ~`, `docker ps -a`, `ps aux --sort=-%cpu | head`.
+6. Kalau ada proses/cron/container asing: **anggap server tidak bisa dipercaya.** Pasang ulang di VPS baru ([02](/operasional/02-pemasangan) bagian "memasang ulang") dengan rahasia baru dan restore data dari arsip **yang diperiksa dulu** (jumlah user/tes wajar, tidak ada akun aneh: `db.users.find({}, {email:1, createdAt:1}).sort({createdAt:-1}).limit(20)`).
+7. Kalau data pengguna mungkin bocor (database terakses): beri tahu pemilik produk hari itu juga; perusahaan peserta perlu tahu — keputusan pemberitahuannya di pemilik produk.
+8. Tulis kronologi (§6) selagi ingat.
+
+## 5. Server hilang total (VPS dihapus, disk rusak, penyedia tutup)
+
+Yang dibutuhkan: `.env.prod` dari password manager, arsip backup terbaru dari luar server, akses GitHub. Kalau Atlas: datanya masih ada, tinggal allowlist IP baru. Lalu [02 Pemasangan](/operasional/02-pemasangan) dari nol (45–60 menit) + restore kalau opsi B. Ubah DNS ke IP baru terakhir (5–30 menit propagasi).
+
+Kalau **tidak ada** backup di luar server dan Mongo di VPS (opsi B): data hilang. Ini sebabnya [05 §3](/operasional/05-backup-dan-restore) wajib.
+
+## 6. Setelah insiden: laporan singkat (isi hari itu juga)
+
+Simpan di catatan operasional; untuk insiden yang berdampak ke pengguna, pengembang menuliskannya juga sebagai RCA di `docs/rca/` (Bahasa Inggris).
+
+```
+## INSIDEN 2026-10-03 — Aplikasi mati 09:40–10:12 WIB (32 menit)
+Dampak: semua pengguna; 2 peserta sedang ujian (PT A), bisa lanjut setelah hidup.
+Gejala: UptimeRobot down 09:43; 502 dari Caddy.
+Penyebab: container OOMKilled (log 09:40), memori 1G tercapai saat 15 peserta submit rekaman layar bersamaan.
+Yang dilakukan: 09:50 SSH; 09:52 docker restart → hidup 09:53; 10:05 mati lagi; 10:10 batas memori dinaikkan 1.5G, make deploy; 10:12 stabil.
+Yang belum: laporkan ke pengembang (kenapa 1G habis) — dikirim 10:30.
+Pencegahan: pantau MEM di docker stats tiap minggu; pengembang periksa penanganan unggahan rekaman.
+```
+
+Tiga hal yang dicari pengembang di laporan ini: **jam**, **log**, **apa yang diubah**.
+
+## 7. Nomor/alamat yang harus ada di tangan (isi sendiri)
+
+| | |
+|---|---|
+| Panel VPS (Sumopod) | url, akun: … |
+| Registrar domain / DNS | … |
+| MongoDB Atlas | … |
+| Resend | … |
+| GitHub repo | https://github.com/muizidn/skillpintar-nextjs |
+| Pengembang (kontak darurat) | … |
+| Pemilik produk | … |
+| Kontak per perusahaan peserta (1 orang masing-masing) | PT A: …, PT B: …, PT C: … |

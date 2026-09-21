@@ -1,0 +1,116 @@
+---
+title: "05 — Backup dan restore"
+sidebarTitle: "Backup dan restore"
+---
+Satu-satunya hal yang tidak bisa dibuat ulang adalah **isi MongoDB**. Semua yang lain (aplikasi, Redis, Caddy) bisa dipasang ulang dari repo dalam satu jam. Bab ini memastikan MongoDB selalu punya salinan, dan kamu **pernah mencoba** mengembalikannya sebelum benar-benar butuh.
+
+Alat: `scripts/backup-mongo.sh` dan `scripts/restore-mongo.sh` (memakai `mongodump`/`mongorestore` dari image `mongo:7` lewat Docker — tidak perlu memasang apa pun), dibungkus `make backup` / `make restore`.
+
+## 1. Backup manual
+
+```bash
+cd ~/skillpintar-nextjs
+make backup ENV=.env.prod
+```
+
+Keluaran: `./backups/mongo-20260921-030000.archive.gz (1.2M)`. Satu file, terkompresi, berisi semua koleksi database yang disebut di `MONGODB_URI`, plus file pendamping kecil `…archive.gz.db` berisi nama database asalnya (dipakai saat restore — **salin keduanya** kalau memindahkan arsip). Arsip lebih tua dari `BACKUP_KEEP_DAYS` (default 14 hari) dihapus otomatis.
+
+Lihat daftar: `make backup_list`.
+
+Lakukan **sebelum**: update versi, mengubah `.env`, menyentuh data lewat `mongosh`, restore.
+
+## 2. Backup otomatis (cron) — wajib
+
+Setiap hari jam 03:00 WIB, plus salinan ke luar server.
+
+```bash
+crontab -e
+```
+
+Tambahkan (ganti path kalau repo tidak di `~/skillpintar-nextjs`):
+
+```cron
+# SkillPintar — backup MongoDB harian 03:00; log ke ~/backup.log
+0 3 * * * cd $HOME/skillpintar-nextjs && ./scripts/backup-mongo.sh .env.prod ./backups >> $HOME/backup.log 2>&1
+```
+
+Cek besok pagi: `tail ~/backup.log` menunjukkan baris `./backups/mongo-...archive.gz (…)`. Kalau ada baris `backup:` dengan kata `not found` / `empty` → T-40.
+
+Kalau cron tidak jalan sama sekali (`~/backup.log` kosong setelah 24 jam): `systemctl status cron`, dan pastikan `crontab -l` menampilkan barisnya sebagai user yang sama yang punya folder repo.
+
+## 3. Salinan di luar server — wajib untuk opsi B, sangat disarankan untuk Atlas M0
+
+Backup yang hanya ada di VPS ikut hilang kalau VPS-nya hilang. Pilih salah satu:
+
+**a. Ke laptop, mingguan (paling sederhana).** Dari laptop:
+
+```bash
+rsync -av user@IP-SERVER:~/skillpintar-nextjs/backups/ ~/skillpintar-backups/
+```
+
+Jadwalkan pengingat mingguan. Simpan di folder yang ikut backup laptop.
+
+**b. Ke object storage, otomatis (rclone).** Di server: `sudo apt install rclone`, `rclone config` (mis. Cloudflare R2 / Backblaze B2 / Google Drive), lalu tambahkan di cron setelah baris backup:
+
+```cron
+15 3 * * * rclone sync $HOME/skillpintar-nextjs/backups remote:skillpintar-backups >> $HOME/backup.log 2>&1
+```
+
+**c. Atlas berbayar (M10, ±US$60/bulan)** punya backup berkelanjutan sendiri. Untuk trial, a atau b cukup.
+
+## 4. Restore (mengembalikan data)
+
+**Restore menimpa data yang ada.** Setiap koleksi di arsip di-*drop* lalu diisi dari arsip. Data yang dibuat setelah waktu backup **hilang**. Lakukan hanya kalau memang itu yang diinginkan (bab 11 §3 membantu memutuskan).
+
+```bash
+cd ~/skillpintar-nextjs
+make backup ENV=.env.prod                  # 1. simpan keadaan sekarang, siapa tahu
+docker stop skillpintar-nextjs-prod        # 2. hentikan aplikasi supaya tidak ada yang menulis
+make backup_list                           # 3. pilih arsip
+make restore FILE=backups/mongo-20260920-030000.archive.gz ENV=.env.prod   # 4. akan minta ketik RESTORE
+docker start skillpintar-nextjs-prod       # 5. jalankan lagi
+make show_status ENV=.env.prod             # 6. healthy? buka situs, login, cek data
+```
+
+Skrip menampilkan arsip (dan nama database di dalamnya), target (tanpa password), lalu menunggu kamu mengetik `RESTORE`. Kalau nama database di arsip berbeda dari nama di `MONGODB_URI` tujuan, skrip memetakannya otomatis. Waktu: detik sampai satu-dua menit.
+
+Setelah restore: pengguna tetap bisa login (akun ada di arsip). Sesi login di Redis tidak tersentuh. Umumkan ke pengguna rentang waktu yang "hilang".
+
+Kalau file `.db` pendampingnya hilang: `./scripts/restore-mongo.sh ARSIP .env.prod --from-db NAMA_DB_ASAL`.
+
+Restore **sebagian** (satu koleksi saja) tidak disediakan lewat `make`; bisa dengan `mongorestore --nsInclude=skillpintar.users` — minta bantuan pengembang.
+
+## 5. Uji restore — lakukan sekali setelah pemasangan, lalu tiap 3 bulan
+
+Backup yang belum pernah di-restore belum tentu bisa di-restore. Uji ke database **sementara** di server, bukan ke database asli:
+
+```bash
+docker run -d --name restore-test -p 127.0.0.1:27018:27017 mongo:7
+sleep 5
+printf 'MONGODB_URI=mongodb://127.0.0.1:27018/skillpintar\n' > /tmp/env.restore-test
+RESTORE_YES=1 ./scripts/restore-mongo.sh backups/mongo-TERBARU.archive.gz /tmp/env.restore-test
+docker exec restore-test mongosh --quiet skillpintar --eval 'db.getCollectionNames().length + " koleksi, users=" + db.users.countDocuments() + ", tests=" + db.tests.countDocuments()'
+docker rm -f restore-test; rm /tmp/env.restore-test
+```
+
+Angka `users` dan `tests` harus masuk akal (sama dengan yang di aplikasi). Catat tanggal uji di catatan operasional. Kalau gagal → T-41.
+
+Contoh hasil uji 2026-09-21 terhadap database pengembangan: `34 koleksi, users=29, tests=38` — cocok.
+
+## 6. Memindahkan data ke server/database lain
+
+Sama dengan restore, tapi `ENV` menunjuk ke `.env` yang `MONGODB_URI`-nya adalah tujuan baru. Urutan: backup di server lama → salin arsip (`scp`) → restore di server baru → arahkan `.env.prod` baru → deploy → pindahkan DNS.
+
+## 7. Yang tidak perlu di-backup
+
+- **Redis**: isinya sementara (token yang di-logout, cache izin, penghitung). Hilang = semua login ulang sekali.
+- **Image Docker**: dibangun ulang dari kode.
+- **File unggahan**: aplikasi tidak menyimpan file; gambar dirujuk lewat URL luar.
+- **`.env.prod`**: BUKAN lewat backup ini — simpan utuh di password manager (bab 01 §9). Tanpa `.env.prod` dan tanpa `JWT_*`-nya, restore tetap bisa; pengguna hanya login ulang.
+
+## 8. Tanya-jawab
+
+**Berapa lama backup bisa dipercaya?** Selama uji restore (§5) rutin lulus.
+**Backup mengganggu pengguna?** Tidak; `mongodump` membaca saja. Di jam 03:00 hampir tidak ada beban.
+**Arsipnya aman?** Berisi semua data termasuk hash password. Perlakukan seperti `.env`: `chmod 700 backups`, jangan kirim lewat chat, hapus dari laptop lama.
+**Kalau MONGODB_URI berubah (ganti cluster)?** Backup mengikuti `.env.prod` yang dipakai; arsip lama tetap bisa di-restore ke cluster baru (§6).

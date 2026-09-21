@@ -1,0 +1,61 @@
+---
+title: "10 — Keamanan: aturan dan checklist"
+sidebarTitle: "Keamanan"
+---
+Yang harus **selalu benar** di server trial. Diperiksa saat pemasangan (bab 02) dan sebulan sekali (bab 07). Bahasa Inggris dengan alasan teknisnya ada di `docs/standards/security.md`.
+
+## 1. Lima larangan
+
+1. **`ALLOW_TEST_ROUTES` tidak boleh ada** di `.env.prod`. Route `/api/v1/test/db/clean` menghapus **semua** koleksi tanpa login. Ada dua lapis penjaga (`NODE_ENV=production` + variabel ini), tapi satu lapis salah set sudah cukup untuk tidak tidur nyenyak. `grep -c ALLOW_TEST_ROUTES .env.prod` → `0`.
+2. **Port 3000, 6379, 27017 tidak boleh terbuka ke internet.** Hanya 22, 80, 443. `sudo ufw status` dan `sudo ss -tlnp` — Redis/Mongo harus di `127.0.0.1:`.
+3. **`.env.prod`, arsip backup, dan password database tidak boleh lewat chat/email.** Password manager atau disampaikan langsung.
+4. **Tidak ada `root` lewat SSH dengan password.** Kunci SSH saja: di `/etc/ssh/sshd_config` → `PasswordAuthentication no`, `PermitRootLogin no`, `sudo systemctl reload ssh`. Uji dari terminal lain **sebelum** menutup yang sekarang.
+5. **Jangan ubah data lewat `mongosh` tanpa backup dan tanpa dicatat.** Tidak ada "undo".
+
+## 2. Rahasia: mana yang ada, di mana, kapan diganti
+
+| Rahasia | Di mana | Kalau bocor / orang dengan akses keluar |
+|---|---|---|
+| `JWT_SECRET`, `JWT_REFRESH_SECRET` | `.env.prod` | ganti keduanya (`openssl rand -base64 48`), `make deploy` → semua login ulang. Umumkan. |
+| Password user MongoDB | Atlas / `.env.prod` | Atlas → Database Access → Edit password → perbarui `MONGODB_URI` → `make deploy` |
+| `RESEND_API_KEY` | Resend / `.env.prod` | Resend → API Keys → hapus, buat baru → `.env.prod` → `make deploy` |
+| Kunci SSH server | `~/.ssh/authorized_keys` | hapus baris kunci orang itu |
+| Deploy key GitHub | GitHub → Settings → Deploy keys | hapus; buat baru di server (bab 01 §8) |
+| Akun Atlas / Resend / UptimeRobot / registrar domain | milik pemilik produk | 2FA aktif; akses tim lewat undangan, bukan berbagi password |
+| Arsip backup | `backups/`, laptop, storage | berisi hash password semua pengguna — perlakukan seperti database |
+
+Tidak ada rahasia di dalam kode/repo. Kalau menemukan satu (`grep -rn "sk_live\|re_[A-Za-z0-9]\{20\}" .` di repo), laporkan segera.
+
+## 3. Yang sudah dijaga aplikasi (supaya tahu apa yang tidak perlu kamu jaga)
+
+- Password disimpan sebagai hash bcrypt; tidak bisa dibaca dari database.
+- Token login 1 jam, perpanjangan 7 hari, di cookie `httpOnly`+`secure` (butuh HTTPS). Logout benar-benar mematikan token (ADR-0013).
+- Rate-limit di login, daftar, lupa password, undangan tamu, submit jawaban.
+- Setiap data pengguna/organisasi difilter berdasarkan pemiliknya di sisi server (ADR-0014, ADR-0016). Header organisasi diverifikasi keanggotaannya.
+- Kunci jawaban tidak pernah dikirim ke peserta (blok `internal`, ADR-0008).
+- Webhook pembayaran memverifikasi tanda tangan Stripe (ADR-0019).
+- Container jalan sebagai user non-root, memori dibatasi.
+
+## 4. Checklist bulanan keamanan
+
+- [ ] `grep -c ALLOW_TEST_ROUTES .env.prod` → 0
+- [ ] `sudo ufw status` → 22, 80, 443 saja
+- [ ] `sudo ss -tlnp | grep -E ':(3000|6379|27017)'` → semua di `127.0.0.1` (untuk 3000: set `DOCKER_EXPOSED_PORT=127.0.0.1:3000` di `.env.prod`, bab 03 A; kalau masih `0.0.0.0:3000`, ufw yang menjaganya — periksa keduanya)
+- [ ] `sudo apt update && apt list --upgradable 2>/dev/null | grep -i -E "openssl|openssh|docker|caddy"` → update yang ada dipasang
+- [ ] `last -20` → login SSH hanya dari orang/IP yang dikenal
+- [ ] Atlas → Network Access → hanya IP server (dan IP laptop admin kalau perlu, sementara)
+- [ ] Atlas / Resend / GitHub: daftar orang yang punya akses masih benar
+- [ ] `ls -l .env.prod` → `-rw-------` (600)
+- [ ] `ls -ld backups` → `drwx------` (700); `chmod 700 backups` kalau belum
+
+## 5. Kalau ada yang keluar dari tim
+
+Hari itu juga: cabut kunci SSH-nya, deploy key kalau dia yang membuat, akses Atlas/Resend/GitHub. Ganti password database dan API key Resend kalau dia pernah melihat `.env.prod`. `JWT_*` diganti kalau dia pernah menyalin `.env.prod` (asumsikan ya kalau tidak yakin).
+
+## 6. Data pribadi
+
+Aplikasi menyimpan: nama, email, hasil tes, dan — kalau tes memakai proctoring — rekaman webcam/layar yang dirujuk lewat URL. Perusahaan peserta adalah pemilik datanya. Kalau ada permintaan hapus data seseorang: bab 09 §4 (akun) dan sesi tesnya (`db["test-sessions"].deleteMany({ "user.email": "..." })` beserta `test-sessions-questions` dan `test-results` yang `sessionId`-nya cocok — minta pengembang kalau ragu). Jangan menyalin data pengguna ke tempat lain untuk "analisis" tanpa persetujuan pemilik produk.
+
+## 7. Tanda-tanda server disusupi
+
+CPU tinggi oleh proses asing (T-23), login SSH dari IP asing (`last`), file baru di `/tmp` atau `~` yang bukan kamu buat, cron asing (`crontab -l`, `ls /etc/cron.d`), container asing (`docker ps -a`). Kalau satu saja terlihat: [11 §4](/operasional/11-insiden).

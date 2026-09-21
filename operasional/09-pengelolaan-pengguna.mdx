@@ -1,0 +1,143 @@
+---
+title: "09 — Pengelolaan pengguna, organisasi, dan batas trial"
+sidebarTitle: "Pengelolaan pengguna, organisasi, dan batas trial"
+---
+Tidak ada panel admin. Hampir semua dilakukan **oleh pengguna sendiri** lewat aplikasi; operator turun tangan lewat `mongosh` hanya untuk kasus yang disebut di sini. Setiap perintah `mongosh` di bab ini: **`make backup ENV=.env.prod` dulu**, lalu buka shell seperti di [04 §9](/operasional/04-operasi-harian).
+
+Tiga jenis orang di aplikasi:
+
+| Jenis | Cara masuk | Ada di koleksi | Dihitung sebagai (trial) |
+|---|---|---|---|
+| **Creator** | daftar di `/auth/register`, verifikasi email, login dengan password | `users` (`isGuest` tidak ada / `false`) | creator (maks 20) |
+| **Peserta tamu** | buka link tes publik, isi nama + email, tanpa password; berlaku 4 jam lalu bisa masuk lagi dengan email yang sama | `users` (`isGuest: true`) | peserta (maks 100) |
+| **Peserta undangan** | link undangan tes ke email tertentu; 4 jam | `temporary_users` | peserta |
+
+Organisasi = "perusahaan". Dibuat oleh seorang creator (dia jadi **Owner**); creator lain bergabung lewat undangan sebagai **Admin** / **Editor** / peran khusus. Data tes dan soal dipisah per organisasi.
+
+## 1. Onboarding satu perusahaan (urutan yang disarankan)
+
+1. Minta **satu** orang dari perusahaan itu jadi Owner. Dia mendaftar sendiri (`/auth/register`), verifikasi email, login.
+2. Owner membuat organisasi: Settings → Organizations → New.
+3. Owner mengundang rekan-rekannya: Settings → Organization → Invite (per email, atau buat link undangan umum). Undangan berlaku **7 hari**.
+4. Rekan menerima undangan (harus login dengan email yang sama seperti yang diundang, kalau undangan per email).
+5. Owner mengatur peran: Settings → Role management. Editor = hanya konten (tes, soal, kursus); Admin = semua kecuali menghapus organisasi.
+6. Kamu: catat nama organisasi, email Owner, tanggal — ke catatan operasional dan laporan mingguan (§7).
+
+Tidak ada langkah operator di jalur normal. Kalau email tidak sampai → §2 / T-12.
+
+## 2. Verifikasi email manual (kalau email tidak sampai)
+
+Gejala: pengguna sudah daftar, tidak bisa login karena "verify your email".
+
+```js
+db.users.updateOne({ email: "orang@kantor.id" }, { $set: { emailVerified: true } })
+```
+
+Harus `modifiedCount: 1`. Pengguna langsung bisa login. Tetap perbaiki penyebab emailnya (T-12) — undangan dan reset password juga butuh email.
+
+## 3. Reset password manual (kalau "lupa password" tidak bisa dipakai)
+
+Cara yang benar: pengguna ke `/auth/forgot-password`. Kalau email mati dan mendesak:
+
+1. Buat hash dari password sementara **di dalam container aplikasi** (punya pustaka bcrypt yang sama):
+   ```bash
+   docker exec skillpintar-nextjs-prod node -e 'console.log(require("bcryptjs").hashSync(process.argv[1], 10))' 'Sementara-2026!'
+   ```
+   Keluarannya diawali `$2b$10$...`.
+2. Simpan ke akun:
+   ```js
+   db.users.updateOne({ email: "orang@kantor.id" }, { $set: { password: "$2b$10$...hash-dari-langkah-1..." } })
+   ```
+3. Paksa sesi lamanya keluar (kalau ada yang memegang akunnya): hapus token perpanjangannya —
+   ```js
+   var u = db.users.findOne({ email: "orang@kantor.id" }, { id: 1 })
+   db["user-tokens"].deleteMany({ userId: u.id })
+   ```
+4. Kirim password sementara **lewat jalur pribadi** (bukan grup), minta segera diganti di Settings → Security.
+
+## 4. Menonaktifkan / menghapus akun
+
+**Pengguna sendiri:** Settings → Security → Delete account (menghapus permanen).
+
+**Operator, menonaktifkan sementara** (mis. karyawan keluar, akunnya jangan bisa dipakai):
+```js
+var u = db.users.findOne({ email: "orang@kantor.id" }, { id: 1 })
+db.users.updateOne({ id: u.id }, { $set: { emailVerified: false, password: "$2b$10$disabled" } })
+db["user-tokens"].deleteMany({ userId: u.id })
+```
+Login akan ditolak. (Kalau orang itu meminta "kirim ulang verifikasi", `emailVerified` bisa kembali `true` — tapi passwordnya tetap tidak sah, jadi tetap tidak bisa masuk.)
+
+Cara lain, sejak versi 2026-09-21: tandai akun sebagai terhapus lunak — `db.users.updateOne({ id: u.id }, { $set: { deletedAt: new Date() } })` — login, perpanjangan token dan reset password mengabaikan akun ber-`deletedAt`. Membatalkannya: `$unset: { deletedAt: "" }`. Emailnya tetap tidak bisa dipakai mendaftar ulang (indeks unik).
+
+**Operator, menghapus permanen:** setelah backup,
+```js
+db.users.deleteOne({ email: "orang@kantor.id" })
+```
+Tes dan sesi yang dia buat **tidak** ikut terhapus (tetap ada dengan `createdBy` yang sudah tidak ada). Biasanya itu yang diinginkan (data perusahaan tetap). Kalau perlu memindahkan kepemilikan tes ke orang lain: `db.tests.updateMany({ createdBy: "<id-lama>" }, { $set: { createdBy: "<id-baru>" } })` — konfirmasi dulu dengan perusahaan.
+
+Mengeluarkan dari **organisasi** saja (bukan hapus akun): Owner/Admin melakukannya di Settings → Organization → anggota → remove. Tidak perlu operator.
+
+## 5. Organisasi
+
+- Owner tidak bisa "dipindahkan" lewat aplikasi. Kalau Owner keluar dari perusahaan: operator ubah `createdBy` organisasi ke id orang baru —
+  ```js
+  db.organizations.updateOne({ id: "org-xxxx" }, { $set: { createdBy: "<id-user-baru>" } })
+  ```
+  lalu hapus cache izin keduanya: `docker exec skillpintar-redis redis-cli --scan --pattern '*:org-xxxx' | xargs -r docker exec -i skillpintar-redis redis-cli del`.
+- Menghapus organisasi: Owner di Settings (soft delete). Tes di dalamnya tidak dihapus.
+- Melihat semua organisasi dan pemiliknya:
+  ```js
+  db.organizations.find({ deletedAt: { $exists: false } }, { id: 1, name: 1, createdBy: 1, createdAt: 1 })
+  ```
+
+## 6. Peserta (tester)
+
+- Peserta tamu tidak perlu dikelola. Kalau mereka lupa hasilnya: link hasil `/test-result/<id>` bisa dibuka siapa pun yang punya link (disengaja — ADR-0016); creator bisa melihat semua hasil tesnya di dashboard.
+- Peserta yang emailnya dipakai orang lain untuk mengerjakan tes publik: itu memang bisa (tidak ada verifikasi untuk tamu). Kalau perusahaan butuh kepastian identitas, gunakan **undangan per email** untuk tes itu, bukan link publik.
+- Membersihkan tamu lama: bab 07 §3.
+
+## 7. Laporan pemakaian mingguan dan batas trial
+
+Batas kesepakatan: **20 creator, 100 peserta, 3 organisasi** — ditegakkan aplikasi lewat `TRIAL_MAX_*` di `.env.prod` (bab 03 B). Saat batas tercapai, orang ke-21/101/4 melihat "Batas uji coba sudah tercapai. Silakan hubungi penyelenggara." — dan yang menghubungi itu kamu. Menaikkan batas: ubah angkanya, `make deploy ENV=.env.prod`, ±40 detik.
+
+Laporan lengkap sekali jalan (dari laptop yang punya `bun` dan `.env.local` berisi `MONGODB_URI` produksi, atau di server lewat container bun seperti di bab 04 §4):
+
+```bash
+bun run scripts/trial-report.ts
+```
+
+Keluarannya: creator / peserta / organisasi terhadap batasnya (dengan tanda `<-- AT LIMIT`), sesi 7 dan 30 hari, lalu satu baris per organisasi (pembuat, anggota, tes, sesi, aktivitas terakhir). Tempel ke catatan operasional.
+
+Kalau tidak bisa menjalankan skrip, angka yang sama dengan `mongosh`:
+
+```js
+// creator (akun terdaftar)
+db.users.countDocuments({ isGuest: { $ne: true } })
+// peserta tamu unik
+db.users.countDocuments({ isGuest: true })
+// peserta undangan unik (email)
+db.temporary_users.distinct("email").length
+// organisasi aktif
+db.organizations.countDocuments({ deletedAt: { $exists: false } })
+// sesi tes 7 hari terakhir
+db["test-sessions"].countDocuments({ createdAt: { $gte: new Date(Date.now() - 7*24*3600*1000) } })
+// tes per organisasi
+db.tests.aggregate([{ $match: { deletedAt: { $exists: false } } }, { $group: { _id: "$organizationId", tes: { $sum: 1 } } }])
+// pengguna terdaftar terbaru
+db.users.find({ isGuest: { $ne: true } }, { email: 1, name: 1, createdAt: 1 }).sort({ createdAt: -1 }).limit(10)
+```
+
+Tulis lima angka pertama ke catatan operasional tiap minggu. Kalau mendekati batas (creator > 16, peserta > 80): beri tahu perusahaan dan pemilik produk sebelum ada yang ditolak; jangan menghapus siapa pun untuk "membuat ruang" — menaikkan batas adalah keputusan pemilik produk, satu baris di `.env.prod`.
+
+## 8. Permintaan yang sering datang lewat WhatsApp — jawaban standar
+
+| Permintaan | Jawaban |
+|---|---|
+| "Saya tidak dapat email verifikasi" | cek spam; tombol kirim ulang di halaman login; kalau tetap tidak: §2 |
+| "Lupa password" | `/auth/forgot-password`; kalau email mati: §3 |
+| "Link undangan tidak bisa" | T-18; minta Owner kirim ulang; berlaku 7 hari; harus login dengan email yang sama |
+| "Rekan saya tidak lihat tes saya" | tes milik pembuatnya; anggota organisasi tidak otomatis melihat tes orang lain (keterbatasan yang tercatat). Buat tes di dalam organisasi yang sama dan bagikan linknya, atau minta pengembang soal "shared organization content" |
+| "Peserta bilang tidak bisa mulai tes" | T-39 (status ACTIVE? PUBLIC?); T-38 (kamera); T-37 (429) |
+| "Bisa tambah kuota peserta?" | catat, teruskan ke pemilik produk; jangan janji |
+| "Bisa hapus akun saya" | Settings → Security → Delete account; atau §4 |
+| "Bisa pindahkan tes ke orang lain" | §4 paragraf terakhir, setelah konfirmasi tertulis |
