@@ -36,7 +36,7 @@ Log disimpan Docker maksimal 3 file × 10 MB, lalu yang lama dibuang otomatis. K
 docker restart skillpintar-nextjs-prod
 ```
 
-±40 detik. Pengguna yang sedang mengerjakan tes **tidak kehilangan jawaban** (jawaban disimpan per pertanyaan di database), tapi request yang tepat saat restart gagal sekali — mereka tinggal mengulang klik. Lakukan di jam sepi kalau bisa.
+±40 detik. Peserta yang sedang mengerjakan tes tidak kehilangan pilihan jawabannya — tersimpan di browser mereka per sesi dan muncul lagi setelah halaman dimuat ulang — tetapi jawaban baru sampai ke server saat tombol Submit ditekan, dan Submit yang jatuh tepat saat restart gagal (peserta melihat "Failed to submit" dan bisa menekan lagi). Waktu tes tetap berjalan dari saat mulai. Jangan restart saat ada ujian berlangsung; lihat sesi aktif dulu (`db["test-sessions"].countDocuments({status:"OPEN"})`).
 
 Restart tidak membaca ulang `.env` — untuk itu pakai `make deploy` (§5).
 

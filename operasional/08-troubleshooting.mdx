@@ -292,7 +292,7 @@ Urutan kemungkinan, dari yang paling sering:
    - `429` → kuota harian Resend (100/hari gratis) habis. Tunggu besok atau upgrade.
 2. Dashboard Resend → **Logs**: emailnya ada? Status `delivered`? Kalau `bounced` → alamat salah. Kalau `delivered` tapi tidak terlihat → **folder spam** pengguna; minta cek, tandai "bukan spam".
 3. Tidak ada di log Resend sama sekali → aplikasi tidak memanggil; log aplikasi (langkah 1) harus menjelaskan.
-4. Sementara menunggu perbaikan: verifikasi/reset manual (bab 09 §2, §3).
+4. Sementara menunggu perbaikan: verifikasi/reset manual (bab 09 §2, §3). Untuk **undangan organisasi**, tautan undangan selalu tampil di dialog setelah "Send Invitation" (log aplikasi mencatat `Invitation email failed:` kalau emailnya gagal) — pengundang bisa menyalin dan mengirimnya sendiri.
 
 Pencegahan: domain Resend harus `Verified` sebelum trial (bab 01 §5); kirim email uji ke Gmail dan Outlook dan cek keduanya masuk inbox.
 
