@@ -29,7 +29,7 @@ Jika belum ada, muncul *"No test sessions yet — Sessions will appear here when
 
 Berisi:
 
-- **Status:** Needs Review / Completed / In progress / Expired / Cancelled.
+- **Status:** Needs Review / Completed / In progress / Expired / Cancelled. **Expired** = jawaban dikirim lewat dari durasi (+1 menit toleransi); jawabannya tersimpan tetapi tidak dinilai dan peserta tidak mendapat halaman hasil.
 - **Student Information** — nama, email, waktu mulai/selesai, waktu pengerjaan.
 - **Test Summary** — progres terjawab, jumlah **Auto-graded** (dinilai otomatis), jumlah **Need review**, dan skor sementara atas soal yang sudah dinilai otomatis.
 - **Question Responses** — jawaban per soal beserta status (**Correct / Incorrect / Pending Review / Auto-graded**). Klik **View** untuk melihat jawaban peserta; klik **Review** untuk menilai soal yang perlu ditinjau.
@@ -39,6 +39,10 @@ Berisi:
 - Anda (pembuat tes) melihat semua sesi di halaman ini.
 - Peserta melihat hasilnya sendiri di halaman hasil (`/test-result/[id]`) yang terbuka setelah selesai. **Halaman hasil bisa dibuka oleh siapa pun yang memegang tautannya** — peserta yang meneruskan tautan berarti membagikan hasilnya. Alamatnya acak dan tidak bisa ditebak.
 - Kunci jawaban **tidak pernah** dikirim ke peserta.
+
+## Kalau peserta me-refresh atau browsernya tertutup
+
+Pilihan jawaban tersimpan **di browser peserta** untuk sesi itu; saat halaman sesi dibuka lagi di browser yang sama, jawabannya muncul kembali dan waktu tetap berjalan dari saat mulai. Jawaban baru **dikirim ke server saat Submit**. Pindah ke perangkat lain berarti mulai dari kosong. Rekaman suara/video dan berkas unggahan tidak ikut tersimpan — harus diulang.
 
 ## Ekspor hasil (CSV)
 
