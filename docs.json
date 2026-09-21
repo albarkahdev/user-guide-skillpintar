@@ -1,0 +1,88 @@
+{
+  "$schema": "https://mintlify.com/docs.json",
+  "theme": "mint",
+  "name": "Panduan SkillPintar",
+  "description": "Panduan pengguna dan panduan operasional SkillPintar, dalam Bahasa Indonesia.",
+  "colors": {
+    "primary": "#16A34A",
+    "light": "#4ADE80",
+    "dark": "#15803D"
+  },
+  "favicon": "/favicon.svg",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Panduan Pengguna",
+        "groups": [
+          { "group": "Mulai", "pages": ["panduan-pengguna/index"] },
+          {
+            "group": "Akun",
+            "pages": [
+              "panduan-pengguna/akun/login",
+              "panduan-pengguna/akun/registrasi",
+              "panduan-pengguna/akun/lupa-password",
+              "panduan-pengguna/akun/verifikasi-email"
+            ]
+          },
+          {
+            "group": "Membuat & Mengelola Tes",
+            "pages": [
+              "panduan-pengguna/bank-soal",
+              "panduan-pengguna/pembuat-tes",
+              "panduan-pengguna/tinjau-jawaban",
+              "panduan-pengguna/sesi-tes"
+            ]
+          },
+          { "group": "Peserta", "pages": ["panduan-pengguna/tes-saya", "panduan-pengguna/sertifikat"] },
+          {
+            "group": "Lainnya",
+            "pages": [
+              "panduan-pengguna/notifikasi",
+              "panduan-pengguna/pengaturan/index",
+              "panduan-pengguna/pengaturan/organisasi",
+              "panduan-pengguna/pengaturan/tema",
+              "panduan-pengguna/pengaturan/bahasa"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Panduan Operasional",
+        "groups": [
+          { "group": "Mulai", "pages": ["operasional/index"] },
+          {
+            "group": "Memasang",
+            "pages": ["operasional/01-persiapan", "operasional/02-pemasangan", "operasional/03-konfigurasi-env"]
+          },
+          {
+            "group": "Menjalankan",
+            "pages": [
+              "operasional/04-operasi-harian",
+              "operasional/05-backup-dan-restore",
+              "operasional/06-pemantauan",
+              "operasional/07-pemeliharaan"
+            ]
+          },
+          {
+            "group": "Saat ada masalah",
+            "pages": ["operasional/08-troubleshooting", "operasional/11-insiden"]
+          },
+          {
+            "group": "Pengguna & keamanan",
+            "pages": ["operasional/09-pengelolaan-pengguna", "operasional/10-keamanan"]
+          },
+          {
+            "group": "Akhir trial & referensi",
+            "pages": ["operasional/12-akhir-trial", "operasional/13-referensi-perintah"]
+          }
+        ]
+      }
+    ]
+  },
+  "navbar": {
+    "links": [{ "label": "Buka aplikasi", "href": "https://skillpintar.com" }]
+  },
+  "footer": {
+    "socials": { "github": "https://github.com/albarkahdev/user-guide-skillpintar" }
+  }
+}

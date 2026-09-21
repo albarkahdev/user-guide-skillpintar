@@ -1,0 +1,107 @@
+---
+title: "01 — Persiapan"
+sidebarTitle: "Persiapan"
+---
+Apa yang harus ada **sebelum** kamu mulai memasang. Selesaikan semua kotak di bab ini dulu; pemasangan (bab 02) akan lancar kalau bab ini tuntas, dan macet di tengah kalau tidak.
+
+Waktu: 1–2 jam kalau semua akun baru dibuat hari ini (menunggu verifikasi domain email bisa lebih lama).
+
+## 1. Server (VPS)
+
+| Kebutuhan | Minimum untuk trial (≤100 peserta, ≤20 creator) | Catatan |
+|---|---|---|
+| CPU | 2 vCPU | Container aplikasi dibatasi 0,5 CPU oleh `docker-compose.yml`; sisanya untuk MongoDB/Redis/Caddy. |
+| RAM | 4 GB | Aplikasi ≤1 GB (dibatasi), MongoDB ~1 GB, Redis &lt;100 MB, sisa untuk OS dan build image. **Build image butuh ~1,5 GB sesaat** — kalau RAM 2 GB, build akan gagal (lihat T-20). |
+| Disk | 40 GB | Image Docker 400–600 MB per versi; bersihkan rutin (bab 07). Backup MongoDB kecil (ratusan KB–puluhan MB). |
+| OS | Ubuntu 22.04 atau 24.04 LTS | Buku ini memakai perintah Ubuntu. Debian 12 juga sama. |
+| Akses | SSH dengan kunci (bukan password) | Bab 10. |
+
+Contoh: Sumopod 2 vCPU / 4 GB / Rp90.000 per bulan — cukup.
+
+- [ ] VPS sudah dibuat, kamu bisa `ssh user@IP` dan masuk.
+- [ ] Kamu tahu **alamat IP publik** server. Tulis di catatan.
+
+## 2. Domain
+
+Aplikasi butuh satu nama domain dengan HTTPS. Tanpa HTTPS, cookie login tidak dikirim browser (`secure` cookie) dan **tidak ada yang bisa login**.
+
+- [ ] Punya domain, mis. `skillpintar.contoh.id` (subdomain cukup).
+- [ ] Di pengelola DNS domain, buat **A record**: `skillpintar` → IP server. Tunggu 5–30 menit.
+- [ ] Cek: `ping skillpintar.contoh.id` dari laptop menjawab IP server.
+
+Tidak butuh satu subdomain per perusahaan: pemisahan data antar perusahaan sudah dilakukan oleh fitur organisasi di dalam aplikasi.
+
+## 3. Database MongoDB — pilih satu
+
+| | A. MongoDB Atlas (di-host, gratis M0) | B. MongoDB di VPS yang sama (Docker) |
+|---|---|---|
+| Biaya | Gratis (512 MB, cukup untuk trial) | Termasuk VPS |
+| Backup | **Paket gratis TIDAK punya backup otomatis.** Tetap pakai `make backup` (bab 05). | `make backup` (bab 05) |
+| Kalau VPS mati | Data aman di Atlas | Data ikut mati — backup harus disalin keluar VPS |
+| Kecepatan | Ada latensi ke internet (pilih region Singapura) | Paling cepat |
+| Repot | Buat akun, allowlist IP | Satu perintah docker |
+
+**Saran untuk trial: A (Atlas)** — data tidak sepaket dengan VPS, dan kalau VPS perlu diganti tinggal pasang ulang aplikasi.
+
+Kalau A:
+- [ ] Akun Atlas dibuat, cluster **M0 gratis**, region **Singapore (ap-southeast-1)**.
+- [ ] Database user dibuat (username + password kuat; simpan di password manager).
+- [ ] **Network Access → IP allowlist**: tambahkan IP publik VPS. (Kalau lupa: aplikasi tidak bisa konek — T-10.)
+- [ ] Salin connection string: `mongodb+srv://USER:PASSWORD@cluster0.xxxxx.mongodb.net/skillpintar?retryWrites=true&w=majority`. **Ganti `skillpintar` dengan nama database yang kamu mau — nama ini penting**, lihat bab 03 tentang `MONGODB_DB`.
+
+Kalau B: tidak perlu apa-apa sekarang; perintahnya di bab 02 §5.
+
+## 4. Redis
+
+Selalu di VPS yang sama, lewat Docker. Tidak perlu akun apa pun. Perintahnya di bab 02 §5.
+
+(Ada opsi Upstash — Redis di-host — untuk pengembangan di laptop. Untuk server, jangan: lebih lambat dan kalau alamatnya mati, setiap login menunggu 9 detik — T-05.)
+
+## 5. Email (Resend)
+
+Dipakai untuk: verifikasi email saat daftar, reset password, undangan organisasi, notifikasi. Layanan: [resend.com](https://resend.com) — paket gratis 100 email/hari, cukup.
+
+- [ ] Akun Resend dibuat.
+- [ ] **Domain diverifikasi** di Resend (tambahkan record DNS yang mereka minta: SPF, DKIM). Tanpa ini, email masuk spam atau ditolak. Tunggu sampai status "Verified".
+- [ ] API key dibuat (`re_...`). Simpan.
+- [ ] Tentukan alamat pengirim, mis. `noreply@skillpintar.contoh.id` — harus di domain yang diverifikasi.
+
+Kalau belum sempat: pemasangan tetap bisa jalan, tapi pendaftaran creator harus dibantu manual (bab 09 §2).
+
+## 6. Realtime (Pusher) — opsional
+
+Dipakai untuk pembaruan saldo kredit secara langsung di layar. **Tidak wajib untuk trial.** Kalau tidak diisi, aplikasi tetap jalan; hanya ada baris peringatan di log (`Error sending realtime message`) yang bisa diabaikan. Kalau mau: akun [pusher.com](https://pusher.com) → Channels app → cluster `ap1`.
+
+## 7. Pembayaran (Stripe) — tidak untuk trial
+
+Trial gratis; biarkan `PAYMENT_PROVIDER` kosong. Halaman beli akan menjawab "tidak tersedia" (503) — itu disengaja. Kalau nanti mau menerima pembayaran: `docs/rfc/RFC-0004-stripe-checkout-webhook.md` (Bahasa Inggris) bagian Rollout.
+
+## 8. Akses ke kode
+
+- [ ] Server bisa `git clone` repo `muizidn/skillpintar-nextjs`. Cara paling aman: **deploy key** — di server `ssh-keygen -t ed25519 -C "skillpintar-vps"`, salin `~/.ssh/id_ed25519.pub`, tambahkan di GitHub → repo → Settings → Deploy keys (**centang "Allow write access"** supaya `make build_image` bisa mendorong tag versi; tanpa itu tetap jalan tapi ada peringatan).
+- [ ] Tahu branch mana yang dipasang. Untuk trial: `develop` (atau tag rilis yang disepakati).
+
+## 9. Di laptop kamu
+
+- [ ] Password manager untuk menyimpan: password SSH/kunci, connection string Mongo, API key Resend, isi `.env.prod`.
+- [ ] Editor teks.
+- [ ] (Opsional) `mongosh` atau MongoDB Compass untuk melihat data langsung — atau pakai `docker run mongo:7 mongosh ...` dari server (bab 13).
+
+## 10. Rencana komunikasi dan jadwal (dari kesepakatan trial)
+
+- Kanal: WhatsApp grup per perusahaan.
+- Setup: satu kali, kamu yang jalankan.
+- Operasional: cek mingguan (bab 07 §1). Masalah tidak mendesak masuk antrian, dikerjakan tiap 3 hari.
+- Feedback bulanan; evaluasi di akhir 6 bulan (bab 12).
+- Batas trial: 20 creator, 100 peserta, 3 organisasi. Aplikasi menegakkannya kalau tiga variabel `TRIAL_MAX_*` diisi di `.env.prod` (bab 03 B); yang ke-21/101/4 ditolak dengan pesan "batas uji coba tercapai". Angkanya dipantau lewat laporan mingguan (bab 09 §7).
+
+## Checklist akhir bab
+
+- [ ] SSH ke VPS jalan
+- [ ] Domain mengarah ke VPS
+- [ ] Connection string MongoDB ada, IP VPS di-allowlist (atau pilih opsi B)
+- [ ] Resend: domain verified, API key ada, alamat pengirim ditentukan
+- [ ] Deploy key terpasang di GitHub
+- [ ] Semua rahasia tersimpan di password manager, bukan di chat
+
+Lanjut ke [02 Pemasangan](/operasional/02-pemasangan).

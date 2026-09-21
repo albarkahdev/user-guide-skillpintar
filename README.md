@@ -1,28 +1,40 @@
-# Panduan Pengguna SkillPintar
+# Panduan SkillPintar
 
-Selamat datang di panduan pengguna **SkillPintar** — platform untuk membuat, membagikan, dan menilai tes online.
+Situs panduan SkillPintar (Bahasa Indonesia), diterbitkan dengan [Mintlify](https://mintlify.com). Dua bagian:
 
-Panduan ini ditulis sederhana dan langkah demi langkah, supaya mudah diikuti walau Anda baru pertama kali memakai aplikasi.
+- **Panduan Pengguna** — untuk pembuat tes dan peserta.
+- **Panduan Operasional** — untuk yang memasang dan merawat server.
 
-## Untuk siapa panduan ini?
+## Sumber kebenaran ada di repo aplikasi
 
-SkillPintar dipakai oleh dua jenis pengguna:
+Isi halaman **tidak ditulis di sini**. Sumbernya:
 
-- **Pembuat tes** (guru, HR, penyelenggara) — membuat bank soal, menyusun tes, mengundang peserta, dan menilai jawaban.
-- **Peserta tes** — mengerjakan tes yang dibagikan dan melihat hasilnya.
+- `docs/panduan-pengguna/` dan `docs/operasional/` di repo `muizidn/skillpintar-nextjs`.
 
-Sebagian besar fitur pembuat berada di menu **Dashboard**.
+Repo ini hanya menerbitkan. Alur perubahan:
 
-## Isi panduan
+1. Ubah file `.md` di repo aplikasi (lewat PR di sana — aturan repo itu mewajibkan panduan operasional diperbarui bersama perubahan kode).
+2. Di repo ini: `node scripts/sync-from-app.mjs ../skillpintar-nextjs` — menghasilkan ulang semua `.mdx` di `panduan-pengguna/` dan `operasional/`.
+3. Kalau ada halaman baru/hilang, sesuaikan `docs.json` (navigasi).
+4. Commit, push ke `main` — Mintlify menerbitkan otomatis (GitHub App).
 
-1. **Akun** — cara masuk, daftar, lupa password, dan verifikasi email.
-2. **Bank Soal** — menyimpan dan mengelola kumpulan soal.
-3. **Pembuat Tes** — menyusun tes dari soal-soal Anda.
-4. **Menilai Jawaban (Tinjau)** — memberi nilai untuk jawaban esai, suara, kode, dan unggahan.
-5. **Tes Saya** — riwayat tes yang pernah Anda kerjakan.
-6. **Sesi Tes** — memantau siapa saja yang mengerjakan tes Anda.
-7. **Sertifikat** — sertifikat kelulusan setelah menyelesaikan tes.
-8. **Notifikasi** — pemberitahuan aktivitas.
-9. **Pengaturan** — akun, organisasi, tema, dan bahasa.
+Jangan mengedit `.mdx` langsung; hasilnya akan tertimpa saat sync berikutnya.
 
-> **Tips:** Gunakan menu di samping (SUMMARY) untuk melompat ke bab tertentu.
+## Pratinjau lokal
+
+```bash
+npm i -g mint
+mint dev
+```
+
+Buka http://localhost:3000. `mint broken-links` memeriksa tautan.
+
+## Yang ada di repo ini
+
+| Path | Isi |
+|---|---|
+| `docs.json` | Konfigurasi Mintlify: nama, warna, navigasi (tab & grup) |
+| `panduan-pengguna/**/*.mdx` | hasil sync (jangan diedit) |
+| `operasional/*.mdx` | hasil sync (jangan diedit) |
+| `scripts/sync-from-app.mjs` | konverter `.md` → `.mdx` (frontmatter, tautan, escape MDX) |
+| `favicon.svg` | ikon |

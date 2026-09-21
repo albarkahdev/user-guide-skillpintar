@@ -1,0 +1,100 @@
+---
+title: "12 — Akhir trial: evaluasi, lanjut, serah terima, atau bongkar"
+sidebarTitle: "Akhir trial"
+---
+Trial 6 bulan berakhir dengan satu dari tiga keputusan per perusahaan: **lanjut berbayar**, **berhenti**, atau **pindah/serah terima**. Bab ini menyiapkan angka untuk keputusan itu dan langkah teknis untuk masing-masing.
+
+## 1. Sebulan sebelum berakhir
+
+- [ ] Kumpulkan catatan mingguan ([09 §7](/operasional/09-pengelolaan-pengguna)) menjadi satu tabel per bulan: creator, peserta, organisasi, sesi tes, keluhan (jumlah, jenis, waktu selesai).
+- [ ] Kumpulkan umpan balik bulanan ([07 §2](/operasional/07-pemeliharaan)) — apa yang disukai / menyulitkan / kurang — per perusahaan.
+- [ ] Hitung biaya nyata: VPS × 6, domain, Atlas/Resend kalau naik paket, jam kerja operasional per minggu (dari catatan).
+- [ ] Ambil angka teknis: jumlah insiden dan total menit mati (dari UptimeRobot → monitor → uptime %), jumlah deploy, jumlah rollback.
+- [ ] Jadwalkan pertemuan evaluasi dengan tiap perusahaan; kirim ringkasan pemakaian mereka sendiri seminggu sebelumnya.
+
+## 2. Bahan evaluasi (template)
+
+```
+# Evaluasi trial SkillPintar — PT A — 2026-03-21 s/d 2026-09-21
+
+## Pemakaian
+| Bulan | Creator | Peserta baru | Sesi tes | Tes dibuat |
+| 1 | 2 | 14 | 31 | 4 |
+...
+Total: 5 creator, 63 peserta unik, 214 sesi, 19 tes.
+
+## Keandalan
+Uptime 99,6% (2 insiden, total 41 menit). 6 deploy, 1 rollback.
+
+## Umpan balik (kutipan)
+Disukai: ...
+Menyulitkan: ...
+Diminta: ...
+
+## Keluhan/permintaan yang masuk: 11 — selesai 9, ditunda 2 (fitur)
+
+## Biaya operasional trial
+VPS Rp540.000, domain Rp150.000, jam kerja ±2 jam/minggu.
+
+## Rekomendasi
+```
+
+## 3. Kalau lanjut (berbayar)
+
+Teknis yang berubah:
+- **Batas trial dicabut** — kalau RFC-0006 terpasang: hapus/naikkan `TRIAL_MAX_*` di `.env.prod`, `make deploy`.
+- **Pembayaran**: aktifkan Stripe kalau memakai model kredit/langganan di aplikasi (RFC-0004 Rollout) — atau tetap tagih manual di luar aplikasi dan biarkan pembayaran di aplikasi nonaktif. Keputusan pemilik produk.
+- **Kapasitas**: kalau peserta > 100 atau perusahaan > 3, tinjau VPS (RAM 8 GB) dan Atlas (M0 512 MB → M2/M10). Lihat tren disk Atlas dari [06 §6](/operasional/06-pemantauan).
+- **Backup**: pertimbangkan Atlas berbayar dengan backup berkelanjutan, atau minimal rclone otomatis ([05 §3b](/operasional/05-backup-dan-restore)).
+- Perbarui [11 §7](/operasional/11-insiden) dengan kontak yang berlaku.
+
+## 4. Kalau berhenti (satu perusahaan atau semua)
+
+**Satu perusahaan berhenti, yang lain lanjut:**
+1. Setelah `make backup`, ekspor data mereka dulu kalau diminta (§6).
+2. Owner mereka menghapus organisasinya di aplikasi (soft delete), atau operator: `db.organizations.updateOne({ id: "org-…" }, { $set: { deletedAt: new Date() } })`.
+3. Akun creator mereka: nonaktifkan atau hapus ([09 §4](/operasional/09-pengelolaan-pengguna)) sesuai permintaan tertulis mereka.
+4. Sesi/hasil peserta mereka: simpan (bagian dari arsip) kecuali mereka minta dihapus — permintaan penghapusan data harus tertulis; lakukan `deleteMany` per `testId` milik organisasi itu, minta pengembang untuk skripnya.
+
+**Semua berhenti (trial selesai tanpa lanjutan):** §7.
+
+## 5. Kalau serah terima ke tim lain
+
+Yang diserahkan (checklist):
+- [ ] Akses: SSH (kunci baru untuk mereka, kunci lama dicabut setelah mereka masuk), panel VPS, Atlas, Resend, registrar, UptimeRobot, GitHub (deploy key baru).
+- [ ] `.env.prod` lewat password manager bersama, bukan chat.
+- [ ] Buku ini (`docs/operasional/`) + catatan operasional lengkap + laporan insiden.
+- [ ] Arsip backup terbaru dan lokasi salinan luar.
+- [ ] Sesi pendampingan: satu kali jalankan bersama [06 §3](/operasional/06-pemantauan), satu deploy ([04 §4](/operasional/04-operasi-harian)), satu uji restore ([05 §5](/operasional/05-backup-dan-restore)).
+- [ ] Setelah mereka mandiri: ganti semua rahasia ([10 §2](/operasional/10-keamanan)) supaya kamu tidak lagi memegangnya.
+
+## 6. Mengekspor data sebuah perusahaan
+
+Format yang bisa dibaca orang: JSON per koleksi, disaring per organisasi. Dari server:
+
+```bash
+MONGODB_URI="$(grep '^MONGODB_URI=' .env.prod | cut -d= -f2- | tr -d '"')"
+ORG=org-xxxx
+mkdir -p ~/export-$ORG
+for c in tests questions organizations organization-collaborators; do
+  docker run --rm --network host -e U="$MONGODB_URI" -v ~/export-$ORG:/out mongo:7 \
+    sh -c "mongoexport --uri=\"\$U\" --collection=$c --query='{\"organizationId\":\"$ORG\"}' --jsonArray --out=/out/$c.json"
+done
+```
+
+Sesi dan hasil tes tidak punya `organizationId` langsung — disaring lewat `testId` milik tes-tes organisasi itu; minta pengembang menyiapkan skrip ekspor lengkap kalau perusahaan memintanya (ini permintaan yang wajar; jangan janji tanggal sebelum bertanya).
+
+Serahkan dalam arsip terenkripsi (zip dengan password yang disampaikan terpisah). Hapus salinan di server setelah diterima.
+
+## 7. Membongkar (kalau semua berhenti)
+
+Urutan yang membuat data tetap bisa dipulihkan kalau ada yang berubah pikiran dalam 90 hari:
+
+1. `make backup ENV=.env.prod`; salin arsip + file `.db`-nya ke **dua** tempat di luar server; catat SHA256 (`sha256sum`).
+2. Beri tahu semua pengguna tanggal penutupan minimal 14 hari sebelumnya; tawarkan ekspor (§6).
+3. Pada tanggalnya: `docker stop skillpintar-nextjs-prod` (situs 502) — biarkan 7 hari untuk memastikan tidak ada yang teriak.
+4. Cabut Resend API key, hapus monitor UptimeRobot, hapus endpoint Stripe kalau ada.
+5. Atlas: **ambil backup terakhir lagi**, lalu Terminate cluster (data di Atlas hilang; arsipmu yang tersisa). Opsi B: `docker rm -f skillpintar-mongo` **setelah** arsip terverifikasi (`sha256sum -c`).
+6. Hapus VPS dari panel penyedia. Domain: biarkan sampai kedaluwarsa atau arahkan ke halaman "layanan berakhir".
+7. Simpan arsip backup 90 hari, lalu hapus (atau sesuai kesepakatan dengan perusahaan). Catat tanggal penghapusan.
+8. `.env.prod` dan rahasia di password manager: hapus setelah arsip dihapus.

@@ -1,0 +1,208 @@
+---
+title: "02 — Pemasangan dari nol"
+sidebarTitle: "Pemasangan dari nol"
+---
+Dari VPS kosong sampai aplikasi bisa dibuka di `https://domain-kamu`. Ikuti urutannya; setiap langkah punya cara cek. Kalau cek gagal, jangan lanjut — buka [08 Troubleshooting](/operasional/08-troubleshooting) dengan kode T yang disebut.
+
+Waktu: 45–60 menit. Prasyarat: semua kotak di [01 Persiapan](/operasional/01-persiapan).
+
+Semua perintah dijalankan di server lewat SSH, sebagai user biasa yang bisa `sudo` (bukan `root` langsung).
+
+## 1. Siapkan sistem operasi
+
+```bash
+sudo apt update && sudo apt upgrade -y
+sudo apt install -y git make curl ufw
+sudo timedatectl set-timezone Asia/Jakarta
+```
+
+Cek: `date` menunjukkan jam WIB yang benar. Jam server yang salah membuat token login dianggap kedaluwarsa (T-09).
+
+## 2. Firewall
+
+Buka hanya SSH, HTTP, HTTPS. Port 3000 (aplikasi) **tidak** boleh terbuka ke internet — Caddy yang akan meneruskannya.
+
+```bash
+sudo ufw allow OpenSSH
+sudo ufw allow 80/tcp
+sudo ufw allow 443/tcp
+sudo ufw --force enable
+sudo ufw status
+```
+
+Cek: `Status: active`, hanya 22, 80, 443 yang `ALLOW`.
+
+## 3. Pasang Docker
+
+```bash
+curl -fsSL https://get.docker.com | sudo sh
+sudo usermod -aG docker $USER
+```
+
+**Logout lalu SSH lagi** supaya grup `docker` aktif. Cek:
+
+```bash
+docker run --rm hello-world
+docker compose version
+```
+
+Keduanya harus sukses tanpa `sudo`. Kalau "permission denied" → kamu belum logout/login ulang.
+
+## 4. Ambil kode
+
+```bash
+cd ~
+git clone git@github.com:muizidn/skillpintar-nextjs.git
+cd skillpintar-nextjs
+git checkout develop        # atau tag rilis yang disepakati
+```
+
+Cek: `git log --oneline -1` menunjukkan commit terbaru. Kalau `Permission denied (publickey)` → deploy key belum terpasang (bab 01 §8).
+
+## 5. Jalankan Redis (dan MongoDB kalau opsi B)
+
+Redis — wajib:
+
+```bash
+docker run -d --name skillpintar-redis --restart unless-stopped \
+  -p 127.0.0.1:6379:6379 \
+  redis:7-alpine redis-server --save 60 1 --loglevel warning
+```
+
+`127.0.0.1:` di depan port berarti hanya bisa diakses dari server ini sendiri. Cek: `docker exec skillpintar-redis redis-cli ping` → `PONG`.
+
+MongoDB — **hanya kalau memilih opsi B** (bab 01 §3). Kalau pakai Atlas, lewati.
+
+```bash
+mkdir -p ~/mongo-data
+docker run -d --name skillpintar-mongo --restart unless-stopped \
+  -p 127.0.0.1:27017:27017 \
+  -v ~/mongo-data:/data/db \
+  mongo:7
+```
+
+Cek: `docker exec skillpintar-mongo mongosh --quiet --eval 'db.runCommand({ping:1}).ok'` → `1`.
+
+Catatan alamat: dari **dalam** container aplikasi, server ini bernama `host.docker.internal` (sudah diatur di `docker-compose.yml`). Jadi di `.env.prod` nanti:
+- Redis: `REDIS_URL=redis://host.docker.internal:6379`
+- Mongo opsi B: `MONGODB_URI=mongodb://host.docker.internal:27017/skillpintar`
+
+## 6. Buat file `.env.prod`
+
+```bash
+cp .env.example .env.prod
+chmod 600 .env.prod
+nano .env.prod
+```
+
+Isi sesuai [03 Konfigurasi](/operasional/03-konfigurasi-env). Minimal yang **harus** diganti dari contoh:
+
+| Baris | Isi |
+|---|---|
+| `APP_ENVIRONMENT` | `prod` |
+| `DOCKER_EXPOSED_PORT` | `127.0.0.1:3000` |
+| `NODE_ENV` | `production` |
+| `NEXT_PUBLIC_APP_BASE_URL` dan `NEXT_PUBLIC_APP_URL` | `https://skillpintar.contoh.id` (tanpa garis miring di akhir) |
+| `TRIAL_MAX_CREATORS` / `TRIAL_MAX_TESTERS` / `TRIAL_MAX_ORGANIZATIONS` | `20` / `100` / `3` (kesepakatan trial) |
+| `ALLOW_TEST_ROUTES` | **hapus barisnya** |
+| `JWT_SECRET` | hasil `openssl rand -base64 48` |
+| `JWT_REFRESH_SECRET` | hasil `openssl rand -base64 48` yang **lain** |
+| `MONGODB_URI` | connection string Atlas (dengan nama database di dalamnya) atau alamat opsi B |
+| `REDIS_URL` | `redis://host.docker.internal:6379` |
+| `UPSTASH_*` | kosongkan |
+| `RESEND_API_KEY`, `ACCOUNT_FROM_EMAIL` | dari Resend |
+| `PAYMENT_PROVIDER`, `STRIPE_*` | kosongkan (trial) |
+| `PUSHER_*` | kosongkan, atau isi kalau punya |
+
+Cek cepat sebelum lanjut:
+
+```bash
+grep -E '^(APP_ENVIRONMENT|NODE_ENV|NEXT_PUBLIC_APP_BASE_URL|MONGODB_URI|REDIS_URL)=' .env.prod | sed -E 's#(://)[^@]*@#\1***@#'
+grep -c ALLOW_TEST_ROUTES .env.prod     # harus 0
+awk -F= '/^JWT_(REFRESH_)?SECRET=/{print $1, length($2)}' .env.prod   # keduanya >= 32
+```
+
+## 7. Bangun image aplikasi
+
+```bash
+make build_image
+```
+
+Ini memakan 3–8 menit dan ~1,5 GB RAM. Di akhir tercetak `Built and tagged: skillpintar-nextjs:v...`. Peringatan `Could not push tag` boleh diabaikan (deploy key tanpa write). Kalau gagal → T-20.
+
+Lalu tandai sebagai versi terbaru:
+
+```bash
+make tag_latest
+```
+
+## 8. Jalankan aplikasi
+
+```bash
+make deploy ENV=.env.prod
+make show_status ENV=.env.prod
+```
+
+Tunggu ±40 detik (health check punya `start_period: 40s`). `show_status` harus menunjukkan `healthy`. Cek dari server:
+
+```bash
+curl -s http://127.0.0.1:3000/api/health
+```
+
+Harus `{"status":"ok"}`. Kalau `unhealthy` atau restart terus → `make show_logs ENV=.env.prod`, lalu T-01.
+
+## 9. Pasang Caddy (HTTPS + domain)
+
+```bash
+sudo apt install -y debian-keyring debian-archive-keyring apt-transport-https
+curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | sudo gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
+curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | sudo tee /etc/apt/sources.list.d/caddy-stable.list
+sudo apt update && sudo apt install -y caddy
+```
+
+Tulis konfigurasinya — ganti domain:
+
+```bash
+sudo tee /etc/caddy/Caddyfile > /dev/null <<'CADDY'
+skillpintar.contoh.id {
+    encode gzip
+    reverse_proxy 127.0.0.1:3000
+}
+CADDY
+sudo systemctl reload caddy
+```
+
+Caddy mengurus sertifikat HTTPS sendiri (Let's Encrypt) dalam ±30 detik, asalkan DNS sudah mengarah ke server dan port 80/443 terbuka.
+
+Cek dari laptop: buka `https://skillpintar.contoh.id` → halaman depan SkillPintar dengan gembok hijau. Kalau tidak → T-30 / T-31.
+
+## 10. Uji pertama (jangan dilewati)
+
+1. Buka `https://domain/auth/register`, daftar dengan email kamu sendiri.
+2. Email verifikasi harus masuk dalam 1 menit. Kalau tidak → T-12. (Jalan pintas: bab 09 §2.)
+3. Klik link verifikasi, login, masuk dashboard.
+4. Buat satu organisasi (Settings → Organizations), buat satu tes kecil, buka link tes publiknya dari browser lain (mode incognito), kerjakan sebagai peserta.
+5. Logout. Login lagi. Semua lancar → pemasangan selesai.
+
+## 11. Aktifkan backup otomatis
+
+Jangan tunda ini ke "nanti". [05 Backup](/operasional/05-backup-dan-restore) §2 — tiga baris `crontab`.
+
+## 12. Aktifkan pemantauan sederhana
+
+[06 Pemantauan](/operasional/06-pemantauan) §1 — daftar gratis di UptimeRobot, pantau `https://domain/api/health`. Kamu akan dapat email/WA kalau aplikasi mati, sebelum pengguna mengeluh.
+
+## Checklist akhir bab
+
+- [ ] `make show_status ENV=.env.prod` → `healthy`
+- [ ] `https://domain` terbuka dengan HTTPS
+- [ ] Daftar → email verifikasi masuk → login → buat tes → kerjakan tes: semua jalan
+- [ ] `ufw status`: hanya 22/80/443
+- [ ] `crontab -l` menampilkan baris backup
+- [ ] UptimeRobot aktif
+- [ ] `.env.prod` tersimpan di password manager (isi utuhnya) — kalau server hilang, ini yang menyelamatkan
+- [ ] Tulis di catatan operasional: tanggal, versi image (`make show_current_image`), siapa yang memasang
+
+## Kalau harus memasang ulang di server baru
+
+Urutan sama, ditambah: pulihkan `.env.prod` dari password manager (§6), dan kalau MongoDB opsi B, restore backup terakhir (bab 05 §4) **sebelum** langkah 10. Dengan Atlas, data sudah menunggu — cukup allowlist IP server baru.

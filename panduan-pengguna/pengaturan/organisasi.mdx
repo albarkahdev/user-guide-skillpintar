@@ -1,0 +1,83 @@
+---
+title: "Pengaturan Organisasi"
+description: "Organisasi memungkinkan Anda bekerja bersama tim — berbagi bank soal, tes, dan hasil."
+---
+## Daftar organisasi
+
+**Alamat:** `/dashboard/settings/organizations`
+
+- Tombol **Create Organization** untuk membuat organisasi baru.
+- Kotak pencarian organisasi.
+- Tabel: **Name, Status, Created At, Actions**.
+  - Badge **Owner** (pemilik) atau **Collaborator** (kolaborator).
+  - Status **Active / Inactive**.
+- Tombol **Edit** dan **Delete** hanya aktif untuk **pemilik**.
+
+Membuat/mengubah organisasi: isi **Organization Name** + centang **Active**, lalu **Save**.
+Menghapus: konfirmasi *"Are you sure you want to delete this organization? This action cannot be undone."*
+
+## Detail organisasi & anggota
+
+**Alamat:** `/dashboard/settings/organization` (organisasi yang sedang aktif)
+
+Dua tab:
+
+- **Organization Details** — ubah nama organisasi & status aktif, lalu **Save Changes**.
+- **Members** — statistik anggota (**Active Members**, **Pending Invitations**, **Administrators**) dan tabel anggota untuk mengubah peran, menghapus anggota, atau membatalkan undangan.
+
+## Mengundang anggota
+
+Klik **Invite Member** → dialog **Add Member**, dengan dua cara:
+
+**1. Email Invite**
+1. Isi **Email Address**.
+2. Pilih **Member Role**.
+3. Klik **Send Invitation** — email undangan dikirim ke anggota.
+
+**2. Invitation Link**
+1. (Opsional) Isi email agar hanya alamat itu yang bisa memakai tautan.
+2. Pilih **Member Role**.
+3. Klik **Generate Link** → salin tautan dengan tombol **Copy**.
+4. Tautan **berlaku 7 hari**. Undangan per email juga berlaku 7 hari, dan hanya bisa diterima oleh akun dengan **email yang sama** persis.
+
+### Peran (Role)
+
+Tiga peran bawaan:
+
+- **Pemilik (Owner)** — yang membuat organisasi; semua izin, termasuk mengubah/menghapus organisasi. Tidak bisa dipindahkan ke orang lain lewat aplikasi.
+- **Admin** — semua izin kecuali menghapus organisasi: mengelola anggota, peran, tagihan, tes, soal, kursus.
+- **Editor** — hanya konten: melihat dasbor, membuat/mengubah **tes**, **soal**, dan **kursus**. Tidak bisa mengelola anggota, peran, atau tagihan.
+
+Peran **kustom** dibuat di [Role Management](#role-management) dengan memilih izin satu per satu. Ada 14 izin dalam empat kelompok: **Umum** (lihat dasbor, analitik, pengaturan), **Tes dan soal** (lihat/kelola tes, lihat/kelola soal, lihat sesi, nilai sesi), **Kursus** (lihat/kelola kursus), **Administrasi** (kelola organisasi, kelola peran, kelola tagihan).
+
+> **Penting:** bergabung ke organisasi **tidak** otomatis membuat Anda melihat tes atau soal milik anggota lain. Setiap tes tetap milik pembuatnya. Untuk bekerja bersama, buat tes di dalam organisasi yang sama dan bagikan tautannya.
+
+## Menerima undangan (bagi penerima)
+
+Penerima membuka tautan `/invitation?code=...`:
+
+- **Valid** → klik **Accept Invitation** (atau **Login to Accept** bila belum masuk).
+- Status lain yang mungkin: **Invitation Expired**, **Invalid Invitation**, **Invitation Accepted**, **Invitation Declined**.
+
+Setelah bergabung, muncul konfirmasi hijau *"You have successfully joined the organization!"*.
+
+## Batas jumlah organisasi
+
+Selama masa uji coba, jumlah organisasi dibatasi. Bila kuota penuh, tombol buat organisasi menampilkan *"Batas uji coba sudah tercapai. Silakan hubungi penyelenggara."*
+
+## Berpindah organisasi
+
+Di menu profil (pojok kanan atas):
+
+- Lihat organisasi aktif, atau pilih **Personal account** untuk tanpa organisasi.
+- Pilih organisasi lain dari daftar **Switch Organization** (organisasi nonaktif tidak bisa dipilih).
+- Setelah berpindah, halaman **dimuat ulang** agar hak akses menyesuaikan.
+- Tautan cepat: **Add Organization**, **Manage Organizations**.
+
+## Role Management
+
+**Alamat:** `/dashboard/settings/role-management`
+
+- Buat peran baru dengan **Create Role**.
+- Tabel: **Name, Description, Type (Built-in/Custom), Actions**.
+- Peran **Built-in** tidak bisa diubah/dihapus; peran **Custom** bisa diedit & dihapus.

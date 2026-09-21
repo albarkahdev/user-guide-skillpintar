@@ -1,0 +1,91 @@
+---
+title: "06 — Pemantauan: cara tahu aplikasi sehat"
+sidebarTitle: "Pemantauan"
+---
+Tidak ada dashboard bawaan, tidak ada pengiriman error ke layanan luar (`docs/standards/observability.md` — tercatat sebagai keterbatasan yang disengaja untuk sekarang). Yang ada: satu alamat health, log Docker, dan alat-alat Linux. Cukup untuk trial kalau dipasang seperti di bawah.
+
+## 1. Pantau dari luar (uptime) — 10 menit, gratis
+
+Tanpa ini, kamu tahu situs mati dari pengguna. Dengan ini, kamu tahu dalam 5 menit.
+
+1. Daftar di [uptimerobot.com](https://uptimerobot.com) (gratis, 50 monitor).
+2. **Add monitor** → tipe HTTP(s) → URL `https://skillpintar.contoh.id/api/health` → interval 5 menit.
+3. Alert contact: email kamu; kalau bisa, juga ke WhatsApp/Telegram lewat integrasi mereka.
+4. (Opsional) monitor kedua tipe *Keyword*: URL yang sama, kata kunci `ok` — menangkap kasus server menjawab tapi bukan `{"status":"ok"}`.
+
+Kalau alert masuk: bab 11 §1.
+
+## 2. Health check yang dipakai Docker
+
+`docker-compose.yml` sudah mengetuk `http://localhost:3000/api/health` setiap 30 detik dari dalam container. 3 kali gagal berturut = status `unhealthy`. **Docker tidak me-restart container yang unhealthy** (hanya kalau prosesnya mati, karena `restart: unless-stopped`). Jadi `unhealthy` harus kamu lihat sendiri — `make show_status` — atau lewat UptimeRobot yang akan mendeteksinya dari luar.
+
+## 3. Pengecekan 2 menit (harian di minggu pertama, lalu mingguan)
+
+```bash
+cd ~/skillpintar-nextjs
+make show_status ENV=.env.prod                          # healthy?
+curl -s https://skillpintar.contoh.id/api/health        # {"status":"ok"}
+docker logs --since 24h skillpintar-nextjs-prod 2>&1 | grep -ci "error"   # berapa baris error 24 jam
+df -h / | tail -1                                       # disk: Use% < 80
+free -h | head -2                                       # RAM: available > 500Mi
+docker stats --no-stream skillpintar-nextjs-prod        # MEM USAGE / LIMIT (limit 1GiB)
+sudo systemctl is-active caddy                          # active
+docker ps --format '{{.Names}} {{.Status}}'             # redis (dan mongo) Up
+tail -3 ~/backup.log                                    # backup semalam sukses
+```
+
+Simpan sebagai skrip kalau mau: `~/cek.sh`. Angka yang perlu ditindaklanjuti ada di §5.
+
+## 4. Membaca log dengan benar
+
+```bash
+docker logs --since 1h skillpintar-nextjs-prod 2>&1 | less
+```
+
+| Yang terlihat | Artinya | Tindakan |
+|---|---|---|
+| `GET /dashboard 200 in 120ms` | request normal | — |
+| `POST /api/v1/auth/login 401` | password salah — normal kalau sesekali | banyak dalam 1 menit dari IP yang sama = seseorang mencoba-coba; rate-limit sudah menahannya (429) |
+| `... 429` | rate-limit bekerja | kalau pengguna sah mengeluh: T-06 |
+| `... 500` | kesalahan di server | baca baris sebelumnya untuk stack trace; T-01/T-02 |
+| `MongoDB connected (PROD)` | koneksi database berhasil | — |
+| `MongoServerSelectionError` / `ECONNREFUSED 27017` | database tidak bisa dihubungi | T-10 |
+| `redis error` / `ECONNREFUSED 6379` | Redis tidak bisa dihubungi | T-05 |
+| `ensureIndexes failed ... E11000` | indeks unik gagal dibuat karena ada data ganda | T-13 (tidak darurat) |
+| `Error sending realtime message` | Pusher tidak diisi | abaikan, atau isi Pusher |
+| `stripe webhook: signature verification failed` | ada yang mengetuk webhook tanpa tanda tangan Stripe | kalau Stripe tidak dipakai: abaikan; kalau dipakai: cek `STRIPE_WEBHOOK_SECRET` |
+| `Missing RESEND_API_KEY` | email diminta tapi Resend belum diisi | isi `.env.prod` (bab 03 F) |
+
+Cari cepat: `docker logs --since 24h skillpintar-nextjs-prod 2>&1 | grep -B3 -A10 "Error:" | head -80`.
+
+## 5. Ambang yang berarti "lakukan sesuatu"
+
+| Ukuran | Normal | Perhatikan | Bertindak |
+|---|---|---|---|
+| Disk `/` | < 60% | 60–80% → bersihkan image bulan ini | > 85% → T-22 sekarang |
+| RAM `available` | > 1 GB | 500 MB–1 GB | < 300 MB → cari yang makan (`docker stats`); mungkin build image sedang jalan |
+| MEM container | 200–500 MB | 700–900 MB | mendekati 1 GiB berulang → restart; kalau terus, laporkan (kebocoran) |
+| Baris `error` per 24 jam | 0–10 | 10–100, baca isinya | > 100 atau satu jenis berulang → bab 08 |
+| Waktu jawab `/api/health` | < 200 ms | 1–3 s | > 5 s atau timeout → T-05 (Redis) / T-10 (Mongo) |
+| Load average (`uptime`) | < 2 | 2–4 | > 4 terus → build sedang jalan? kalau tidak, T-23 |
+
+## 6. Pantau database (Atlas)
+
+Atlas → cluster → **Metrics**: Connections (aplikasi memakai belasan; kalau ratusan, ada yang bocor — laporkan), Disk Usage (M0 batas 512 MB — di 400 MB mulai rencanakan upgrade atau bersihkan sesi tes lama, bab 07 §3), Operations.
+
+Atlas → **Alerts**: aktifkan alert bawaan "connections > 80%" dan "disk > 90%".
+
+## 7. Pantau Redis dan Mongo lokal (opsi B)
+
+```bash
+docker exec skillpintar-redis redis-cli info memory | grep used_memory_human    # biasanya < 50M
+docker exec skillpintar-redis redis-cli dbsize                                   # jumlah kunci; puluhan–ribuan normal
+docker exec skillpintar-mongo mongosh --quiet --eval 'db.stats().dataSize/1e6 + " MB"' skillpintar
+```
+
+## 8. Apa yang TIDAK terpantau (jujur)
+
+- Kesalahan yang terjadi di browser pengguna (JavaScript error) — tidak ada laporannya. Tanya pengguna: browser apa, langkahnya apa, tangkapan layar.
+- Email yang tidak sampai — lihat di dashboard Resend → Logs.
+- Berapa banyak orang sedang memakai — tidak ada penghitung langsung. Perkiraan: `docker logs --since 10m ... | grep -c "GET /"`, atau dari database (bab 09 §7).
+- Kualitas jaringan pengguna (ujian dengan webcam/rekaman layar berat di koneksi lambat) — di luar jangkauan server.

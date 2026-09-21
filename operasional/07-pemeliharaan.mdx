@@ -1,0 +1,69 @@
+---
+title: "07 — Pemeliharaan rutin"
+sidebarTitle: "Pemeliharaan rutin"
+---
+Jadwal yang, kalau diikuti, membuat trial 6 bulan berjalan tanpa kejutan. Setiap tugas menyebut babnya. Semua bersama-sama: **±20 menit per minggu, ±1 jam per bulan.**
+
+## 1. Mingguan (hari yang sama tiap minggu, mis. Senin pagi)
+
+- [ ] Pengecekan 2 menit ([06 §3](/operasional/06-pemantauan)) — status, health, error 24 jam, disk, RAM, backup semalam.
+- [ ] Baca error log seminggu: `docker logs --since 168h skillpintar-nextjs-prod 2>&1 | grep -i "error" | sort | uniq -c | sort -rn | head -20`. Pola baru → bab 08 atau laporkan ke pengembang.
+- [ ] Laporan pemakaian ([09 §7](/operasional/09-pengelolaan-pengguna)): jumlah creator, peserta, organisasi, sesi tes minggu ini. Bandingkan dengan batas trial (20 / 100 / 3). Simpan angkanya — ini bahan evaluasi akhir.
+- [ ] Antrian masalah: buka daftar keluhan dari WhatsApp minggu ini; yang mendesak sudah ditangani hari itu, yang tidak mendesak dikerjakan dalam siklus 3 hari sesuai kesepakatan. Tutup yang selesai, tulis balasannya ke grup.
+- [ ] Ada versi baru di repo yang ingin dipasang? [04 §4](/operasional/04-operasi-harian). Jangan di hari Jumat sore.
+
+## 2. Bulanan
+
+- [ ] Semua yang mingguan.
+- [ ] Bersihkan image Docker ([04 §7](/operasional/04-operasi-harian)). Cek `df -h`.
+- [ ] Update sistem operasi: `sudo apt update && sudo apt upgrade -y`; kalau kernel diperbarui (`ls /var/run/reboot-required`), restart server di jam sepi: `sudo reboot` → setelah naik, semua container kembali sendiri (`restart: unless-stopped`); cek `make show_status`.
+- [ ] Update Docker ikut apt. Caddy juga.
+- [ ] Salin backup ke luar server kalau memilih cara manual ([05 §3a](/operasional/05-backup-dan-restore)); cek folder tujuan ada file bulan ini.
+- [ ] Cek pemakaian Atlas ([06 §6](/operasional/06-pemantauan)): disk M0 di bawah 400 MB?
+- [ ] Cek pemakaian Resend (dashboard): masih di bawah 100 email/hari? Ada bounce/complaint?
+- [ ] Sertifikat HTTPS: Caddy memperbarui sendiri; cukup lihat gemboknya masih hijau dan `sudo journalctl -u caddy --since "30 days ago" | grep -i "error" | tail`.
+- [ ] Umpan balik bulanan ke tiap perusahaan (kesepakatan trial): tiga pertanyaan — apa yang disukai, apa yang menyulitkan, apa yang kurang. Tulis jawabannya di catatan operasional; teruskan ke pengembang sebagai daftar.
+- [ ] Tinjau akses: siapa saja yang punya SSH ke server dan akses ke Atlas/Resend/GitHub? Masih perlu semua? ([10 §5](/operasional/10-keamanan))
+
+## 3. Tiap 3 bulan
+
+- [ ] **Uji restore** ([05 §5](/operasional/05-backup-dan-restore)). Catat tanggalnya.
+- [ ] Bersihkan data sementara yang tidak dibutuhkan (setelah backup):
+  - peserta tamu lama: `db.users.deleteMany({ isGuest: true, createdAt: { $lt: new Date(Date.now() - 90*24*3600*1000) } })` — **hanya kalau** sesi tes mereka juga tidak dibutuhkan lagi; kalau ragu, jangan.
+  - `temporary_users` / `temporary_tokens` kedaluwarsa: `db.temporary_users.deleteMany({ expiresAt: { $lt: new Date() } })`, sama untuk `temporary_tokens`.
+  - `user-tokens`, `password-resets`, `email-verifications` sudah dibersihkan otomatis oleh indeks TTL sejak RFC-0003.
+- [ ] Ganti password database dan API key Resend kalau ada orang yang berhenti punya akses (bab 10 §4). `JWT_*` diganti hanya kalau dicurigai bocor.
+
+## 4. Catatan operasional — satu file, selalu diisi
+
+Buat `~/CATATAN.md` di server (atau catatan di laptop; yang penting satu tempat) dengan format:
+
+```
+## 2026-09-21 — Pemasangan awal
+- Versi: skillpintar-nextjs:v0.1.0-develop-build.20260921.1 (commit a18ca96)
+- Mongo: Atlas M0 ap-southeast-1, db `skillpintar`
+- Oleh: Ahsan
+- Catatan: Resend domain verified 21/09; Pusher kosong.
+
+## 2026-09-28 — Cek mingguan
+- healthy, disk 31%, RAM avail 1.9G, 0 error, backup ok
+- Pemakaian: 4 creator, 17 peserta, 2 organisasi, 23 sesi minggu ini
+- Keluhan: 1 (link undangan kedaluwarsa — dijelaskan 7 hari) — selesai
+
+## 2026-10-05 — Update ke v0.1.0-develop-build.20261005.1
+- Dari: ...20260921.1. Backup: mongo-20261005-091200.archive.gz
+- Perubahan: RFC-0003 indeks → precondition script OK
+- Hasil: healthy, login ok
+```
+
+Setiap baris di sini adalah 10 menit yang dihemat saat ada masalah ("apa yang berubah sejak terakhir jalan?").
+
+## 5. Kapan memanggil pengembang
+
+- Error yang sama berulang dan tidak ada di bab 08.
+- Aplikasi memakai memori mendekati 1 GB terus-menerus.
+- Ada permintaan fitur/perubahan dari perusahaan (bukan tugas operasional — catat, teruskan).
+- Setelah rollback.
+- Apa pun yang membuatmu ragu menyentuh data.
+
+Kirimkan: versi (`make show_current_image`), kapan mulai, potongan log (`docker logs --since 2h ... > log.txt`), langkah yang sudah dicoba, dan bagian catatan operasional sejak deploy terakhir.

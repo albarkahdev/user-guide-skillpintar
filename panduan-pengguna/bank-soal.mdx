@@ -1,0 +1,66 @@
+---
+title: "Bank Soal"
+description: "Bank Soal adalah tempat menyimpan semua soal Anda. Soal yang tersimpan di sini bisa dipakai berulang kali di berbagai tes."
+---
+**Alamat halaman:** `/dashboard/question-banks`
+
+## Tampilan halaman
+
+Di halaman Bank Soal Anda menemukan:
+
+- Tombol **Create Question** — membuat soal satu per satu.
+- Tombol **Bulk Import** — memasukkan banyak soal sekaligus lewat JSON.
+- Kotak **pencarian** soal dan bank.
+- Filter: **Type** (jenis soal), **Difficulty** (tingkat kesulitan), **Status** (aktif/nonaktif), **Tag**, dan **Sort** (urutan).
+- Tab: **All Banks / Shared / Private**.
+- Tombol ganti tampilan **Grid** atau **List**.
+
+Jika belum ada soal, muncul: *"No questions yet — Create your first question or import a JSON batch."*
+
+## Membuat satu soal
+
+1. Klik **Create Question** → terbuka editor soal.
+2. Pilih **Question Type** (jenis soal — lihat daftar di bawah).
+3. Isi **Question Text** (pertanyaan).
+4. Isi bagian **jawaban** — kolomnya menyesuaikan jenis soal yang dipilih.
+5. Tambahkan **Tags** bila perlu (ketik lalu tekan Enter; klik chip untuk menghapus).
+6. Buka bagian **Advanced** untuk mengatur **Difficulty**: Easy / Medium / Hard (default Medium).
+7. Klik **Save**.
+
+> **Draf otomatis:** Soal yang belum disimpan tersimpan sementara di browser. Saat kembali, muncul tawaran **"Restore draft?"** untuk melanjutkan.
+>
+> Setiap soal wajib punya teks. Jika kosong, muncul *"Question text is required."*
+
+## Jenis soal yang didukung
+
+SkillPintar mendukung **9 jenis soal**:
+
+| Jenis | Nama | Penjelasan singkat |
+|---|---|---|
+| Multiple Choice | Pilihan ganda | Beberapa jawaban benar bisa dipilih. |
+| Single Choice | Pilihan tunggal | Hanya satu jawaban benar. |
+| Text Input | Isian teks / esai | Peserta mengetik jawaban bebas. **Dinilai manual.** |
+| Code Input | Jawaban kode | Peserta menulis kode; ada bahasa & test case. **Dinilai manual.** |
+| Image Based | Berbasis gambar | Soal menampilkan gambar + pilihan jawaban. |
+| Audio Based | Berbasis audio | Soal memutar audio + pilihan jawaban. |
+| Audio Answer | Jawaban audio | Peserta menjawab dengan memilih opsi audio. |
+| Voice Input | Rekam suara | Peserta merekam jawaban suara. **Dinilai manual.** |
+| File Upload | Unggah berkas | Peserta mengunggah file. **Dinilai manual.** |
+
+> Jenis bertanda **"Dinilai manual"** tidak dinilai otomatis oleh sistem — pembuat tes menilai sendiri lewat halaman [Menilai Jawaban (Tinjau)](/panduan-pengguna/tinjau-jawaban).
+
+## Impor banyak soal (Bulk Import)
+
+1. Klik **Bulk Import** → terbuka dialog **Bulk Import Questions**.
+2. Ada dua tab:
+   - **Editor** — tempel/ketik JSON, atau klik **Upload JSON** untuk memuat file `.json`.
+   - **Samples** — contoh format per jenis soal (bisa **Load all** / **Copy all** atau per kartu).
+3. Klik **Validate** untuk memeriksa kesalahan tiap soal.
+4. Klik **Import** untuk menyimpan.
+
+Format JSON tiap soal berisi: `type`, `question`, `difficulty`, dan `options`/`correctAnswers`.
+
+## Tag dan pengelompokan
+
+- Soal dikelompokkan dengan **tag** bebas (chip), lalu bisa difilter di halaman daftar.
+- Tab **All / Shared / Private** menunjukkan hak akses, bukan kategori buatan sendiri.
