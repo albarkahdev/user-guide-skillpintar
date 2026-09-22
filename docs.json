@@ -14,7 +14,13 @@
       {
         "tab": "Panduan Pengguna",
         "groups": [
-          { "group": "Mulai", "pages": ["panduan-pengguna/index"] },
+          {
+            "group": "Mulai",
+            "pages": [
+              "panduan-pengguna/index",
+              "panduan-pengguna/uji-coba"
+            ]
+          },
           {
             "group": "Akun",
             "pages": [
@@ -33,7 +39,13 @@
               "panduan-pengguna/sesi-tes"
             ]
           },
-          { "group": "Peserta", "pages": ["panduan-pengguna/tes-saya", "panduan-pengguna/sertifikat"] },
+          {
+            "group": "Peserta",
+            "pages": [
+              "panduan-pengguna/tes-saya",
+              "panduan-pengguna/sertifikat"
+            ]
+          },
           {
             "group": "Lainnya",
             "pages": [
@@ -49,10 +61,19 @@
       {
         "tab": "Panduan Operasional",
         "groups": [
-          { "group": "Mulai", "pages": ["operasional/index"] },
+          {
+            "group": "Mulai",
+            "pages": [
+              "operasional/index"
+            ]
+          },
           {
             "group": "Memasang",
-            "pages": ["operasional/01-persiapan", "operasional/02-pemasangan", "operasional/03-konfigurasi-env"]
+            "pages": [
+              "operasional/01-persiapan",
+              "operasional/02-pemasangan",
+              "operasional/03-konfigurasi-env"
+            ]
           },
           {
             "group": "Menjalankan",
@@ -65,24 +86,40 @@
           },
           {
             "group": "Saat ada masalah",
-            "pages": ["operasional/08-troubleshooting", "operasional/11-insiden"]
+            "pages": [
+              "operasional/08-troubleshooting",
+              "operasional/11-insiden"
+            ]
           },
           {
             "group": "Pengguna & keamanan",
-            "pages": ["operasional/09-pengelolaan-pengguna", "operasional/10-keamanan"]
+            "pages": [
+              "operasional/09-pengelolaan-pengguna",
+              "operasional/10-keamanan"
+            ]
           },
           {
             "group": "Akhir trial & referensi",
-            "pages": ["operasional/12-akhir-trial", "operasional/13-referensi-perintah"]
+            "pages": [
+              "operasional/12-akhir-trial",
+              "operasional/13-referensi-perintah"
+            ]
           }
         ]
       }
     ]
   },
   "navbar": {
-    "links": [{ "label": "Buka aplikasi", "href": "https://skillpintar.com" }]
+    "links": [
+      {
+        "label": "Buka aplikasi",
+        "href": "https://skillpintar.com"
+      }
+    ]
   },
   "footer": {
-    "socials": { "github": "https://github.com/albarkahdev/user-guide-skillpintar" }
+    "socials": {
+      "github": "https://github.com/albarkahdev/user-guide-skillpintar"
+    }
   }
 }
