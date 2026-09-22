@@ -3,7 +3,7 @@ title: "Panduan Masa Uji Coba (Trial)"
 ---
 Halaman ini untuk perusahaan/sekolah yang ikut **masa uji coba SkillPintar**. Semua yang perlu diketahui ada di sini, dari hari pertama sampai uji coba berakhir. Bab lain di panduan ini menjelaskan tiap fitur lebih rinci — tautannya ada di setiap langkah.
 
-**Cara membaca halaman ini:** kalau baru mulai, baca berurutan dari §1. Kalau sedang mencari sesuatu, lompat lewat daftar isi di bawah.
+**Cara membaca halaman ini:** kalau baru mulai, baca berurutan dari §1. Kalau sedang mencari sesuatu, lompat lewat daftar isi di bawah. Nama tombol ditulis seperti yang tampil saat aplikasi berbahasa Indonesia; padanan Inggrisnya dalam kurung bila berbeda. Alur di halaman ini sudah dijalankan ulang dari awal sampai akhir pada 22 Sep 2026.
 
 ## Daftar isi
 
@@ -50,18 +50,18 @@ Semua akun pembuat tes (Owner, Admin, Editor) dihitung ke kuota **20 pembuat tes
 
 ### Owner (satu orang per perusahaan)
 
-- [ ] Daftar akun di halaman **Register** → [Registrasi](/panduan-pengguna/akun/registrasi). Password minimal 6 karakter.
+- [ ] Daftar akun di halaman **Daftar** (Register) → [Registrasi](/panduan-pengguna/akun/registrasi). Password minimal 6 karakter. Setelah "Pendaftaran berhasil" halaman tidak berpindah — lanjut ke email.
 - [ ] Buka email, klik tautan verifikasi (berlaku 24 jam) → [Verifikasi Email](/panduan-pengguna/akun/verifikasi-email). Tidak masuk? Cek folder spam, lalu [§7](#email-verifikasi-tidak-masuk).
 - [ ] Masuk → [Login](/panduan-pengguna/akun/login).
-- [ ] Buat organisasi: **Dashboard → Settings → Organization → buat organisasi** → [Pengaturan Organisasi](/panduan-pengguna/pengaturan/organisasi). Satu perusahaan = satu organisasi.
-- [ ] Undang tim: **Invite Member** → isi email → pilih peran → **Send Invitation**. Email undangan dikirim, dan tautan undangan juga tampil di dialog — salin dan kirim lewat WA kalau emailnya lambat. Undangan berlaku 7 hari.
-- [ ] Pilih organisasi itu sebagai organisasi aktif: menu profil kanan atas → **Switch Organization** → [Berpindah organisasi](/panduan-pengguna/pengaturan/organisasi#berpindah-organisasi). Lakukan sebelum membuat soal dan tes, supaya semuanya tercatat di organisasi.
+- [ ] Buat organisasi: **Dasbor → Pengaturan → Daftar Organisasi** (Settings → Organizations) → tombol **Buat Organisasi** → isi nama → **Simpan** → [Pengaturan Organisasi](/panduan-pengguna/pengaturan/organisasi). Satu perusahaan = satu organisasi. Setelah tersimpan Anda dibawa ke Dasbor.
+- [ ] Pilih organisasi itu sebagai organisasi aktif: **muat ulang halaman** (daftar di menu baru terisi setelah itu), lalu menu profil kanan atas → **Ganti Organisasi** (Switch Organization) → nama organisasi → [Berpindah organisasi](/panduan-pengguna/pengaturan/organisasi#berpindah-organisasi). Menu profil lalu menampilkan **Organisasi Saat Ini**. Lakukan sebelum mengundang, membuat soal, atau membuat tes, supaya semuanya tercatat di organisasi.
+- [ ] Undang tim: **Pengaturan → Organisasi** (menu ini baru muncul setelah organisasi dipilih) → tab **members** → **Undang Anggota** (Invite Member) → isi email → pilih peran → **Kirim Undangan** (Send Invitation). Email undangan dikirim, dan tautan undangan juga tampil di dialog dengan tombol salin — kirim lewat WA kalau emailnya lambat. Undangan berlaku 7 hari. Anggota yang diundang muncul di daftar dengan status **Undangan Tertunda** sampai ia menerima.
 
 ### Admin / Editor (anggota tim)
 
 - [ ] Daftar akun dengan **email yang sama** dengan yang diundang → [Registrasi](/panduan-pengguna/akun/registrasi), verifikasi, masuk.
-- [ ] Buka tautan undangan (dari email atau dari Owner) → klik **Accept Invitation** → [Menerima undangan](/panduan-pengguna/pengaturan/organisasi#menerima-undangan-bagi-penerima).
-- [ ] Pilih organisasi itu sebagai organisasi aktif.
+- [ ] Buka tautan undangan (dari email atau dari Owner). Halaman menunjukkan siapa yang mengundang, nama organisasi, dan peran. Belum masuk? Klik **Masuk untuk Menerima** — setelah login Anda dikembalikan ke halaman undangan. Lalu klik **Terima Undangan** → "Undangan Diterima" → **Buka Dasbor Saya** → [Menerima undangan](/panduan-pengguna/pengaturan/organisasi#menerima-undangan-bagi-penerima).
+- [ ] Cek menu profil kanan atas: **Organisasi Saat Ini** harus nama organisasi itu. Kalau belum, **Ganti Organisasi**.
 - [ ] Buat soal pertama → [Bank Soal](/panduan-pengguna/bank-soal).
 - [ ] Buat tes pertama dari soal itu → [Pembuat Tes](/panduan-pengguna/pembuat-tes).
 
@@ -76,17 +76,18 @@ Urutan yang dipakai hampir semua perusahaan. Tiap langkah menunjuk ke bab yang m
 1. **Owner mendaftar dan membuat organisasi** — [§3](#owner-satu-orang-per-perusahaan).
 2. **Owner mengundang tim** — [Pengaturan Organisasi → Mengundang anggota](/panduan-pengguna/pengaturan/organisasi#mengundang-anggota).
 3. **Tim membuat bank soal** — [Bank Soal](/panduan-pengguna/bank-soal). Sembilan jenis soal ([daftarnya](/panduan-pengguna/bank-soal#jenis-soal-yang-didukung)): pilihan ganda/tunggal, berbasis gambar/audio, dan jawaban audio dinilai **otomatis**; isian teks/esai, kode, rekam suara, dan unggah berkas dinilai **manual** (langkah 10).
-4. **Buat tes** — [Pembuat Tes](/panduan-pengguna/pembuat-tes): judul, pilih soal dari bank, **Duration** (waktu pengerjaan), pengaturan acak/jumlah soal per sesi, proctoring bila perlu.
-5. **Publikasikan** — set **Access** dan **Status = Active** → [Mempublikasikan tes](/panduan-pengguna/pembuat-tes#mempublikasikan-tes). Status Active hanya bisa dipilih setelah tes punya minimal satu soal.
+4. **Buat tes** — [Pembuat Tes](/panduan-pengguna/pembuat-tes) → **Buat Tes Baru**: isi **Judul**, **Akses**, **Pembuat** (wajib — ketik nama, lalu pilih **Create "nama"** kalau belum ada; nama itu tampil di halaman depan tes sebagai "Dibuat oleh"), **Durasi (detik)**, acak/jumlah soal per sesi, proctoring bila perlu. Klik **Simpan** — tes tersimpan sebagai **Draf**.
+   Lalu tambahkan soal: tab **Pertanyaan** → **Kelola Pertanyaan** → **Tambah Pertanyaan** → centang soal dari bank → **Tambah (n) Pertanyaan** → **Kembali ke ujian**. Soal baru bisa ditambahkan hanya setelah tes disimpan.
+5. **Publikasikan** — di halaman tes klik **Edit**, set **Akses = Publik** dan **Status = Aktif**, **Simpan** → [Mempublikasikan tes](/panduan-pengguna/pembuat-tes#mempublikasikan-tes). Status Aktif hanya bisa dipilih setelah tes punya minimal satu soal.
    - **Public**: siapa pun yang punya tautan bisa ikut. Cocok untuk kelas atau rekrutmen terbuka.
    - **Private**: hanya email yang ada di daftar (allowlist) yang bisa ikut, lewat tautan sekali pakai per email → [Membagikan tes (undangan)](/panduan-pengguna/pembuat-tes#membagikan-tes-undangan).
-6. **Bagikan tautan** ke peserta — alamat halaman depan tes (`/test-landing/…`) untuk Public, atau tautan per email untuk Private. Kirim lewat WA, email, atau LMS sekolah.
-7. **Peserta membuka tautan** → halaman depan tes → **Mulai Tes** → isi nama + email (Public) → mengisi data singkat (peran & pengalaman, sekali saja) → mulai mengerjakan.
+6. **Bagikan tautan** ke peserta — untuk tes Publik yang Aktif, tombol **Salin tautan tes** muncul di atas halaman tes (alamatnya `…/test-landing/<id-tes>`); untuk Private, tautan per email dari tab **Peserta**. Kirim lewat WA, email, atau LMS sekolah.
+7. **Peserta membuka tautan** → halaman depan tes → **Gabung & Mulai Tes** → isi **Nama** + **Email** → **Ikuti Tes** → kembali ke halaman depan tes → klik **Mulai Tes Anda** (sekali lagi, memang begitu) → isi data singkat (peran & pengalaman, hanya saat pertama kali) → **Simpan & lanjutkan** → soal pertama tampil dan waktu mulai berjalan.
 8. **Peserta mengerjakan.** Waktu berjalan sejak mulai. Pilihan jawaban tersimpan di browser peserta, jadi refresh atau HP yang memuat ulang halaman tidak menghilangkan jawaban (lihat [§7](#peserta-tidak-sengaja-menutup-browser-atau-me-refresh)). Saat waktu habis, jawaban dikirim otomatis.
 9. **Peserta melihat hasil** di halaman hasil yang terbuka setelah Submit: nilai, jawaban benar/salah, sertifikat → [Sertifikat](/panduan-pengguna/sertifikat). Kalau ada soal yang dinilai manual, nilai masih "sementara" sampai langkah 10 selesai.
 10. **Pembuat tes menilai jawaban manual** — [Menilai Jawaban (Tinjau)](/panduan-pengguna/tinjau-jawaban). Setelah semua dinilai, peserta mendapat notifikasi dan nilai akhirnya.
-11. **Pembuat tes melihat semua sesi** — [Sesi Tes](/panduan-pengguna/sesi-tes): siapa mengerjakan, kapan, berapa lama, jawaban per soal, status (Completed / Needs Review / Expired / Cancelled).
-12. **Ekspor hasil ke CSV** untuk rapor atau rekap → [Ekspor hasil](/panduan-pengguna/sesi-tes#ekspor-hasil-csv).
+11. **Pembuat tes melihat semua sesi** — di halaman tes, tab **Sesi**: satu baris per peserta (nama, email, mulai/selesai, nilai, status Selesai / Perlu Ditinjau / Expired / Cancelled) → **Lihat Detail** untuk jawaban per soal → [Sesi Tes](/panduan-pengguna/sesi-tes). Tidak ada halaman "semua sesi" lintas tes; masuk lewat tesnya.
+12. **Ekspor hasil** — di detail sesi, **Ekspor Laporan** mengunduh CSV **satu peserta** (jawaban per soal) → [Ekspor hasil](/panduan-pengguna/sesi-tes#ekspor-hasil-csv). Rekap satu kelas: baca nilai per baris di tab **Sesi** (belum ada ekspor per kelas — sudah diminta).
 13. **Ulangi** langkah 3–12 untuk tes berikutnya. Soal di bank bisa dipakai di banyak tes.
 
 ## 5. Batas kuota dan apa yang terjadi kalau penuh
@@ -114,7 +115,9 @@ Yang perlu diingat:
 | **Kursus** (Courses, Created Courses) | Bukan bagian dari uji coba; boleh dicoba tetapi tidak dijamin dan tidak dipantau | Fokus ke soal dan tes. |
 | **Purchased Tests** di Tes Saya | Selalu kosong | — |
 | Tab **Analytics** di dashboard | Angka ringkasan tersedia; sebagian grafik masih contoh | Untuk rekap resmi pakai [Ekspor CSV](/panduan-pengguna/sesi-tes#ekspor-hasil-csv). |
-| Pengaturan **nilai kelulusan (passing score)** dan **bagian/section** di tes | Belum ada | Tentukan batas lulus di luar aplikasi (dari CSV). |
+| Pengaturan **nilai kelulusan (passing score)** dan **bagian/section** di tes | Belum ada | Tentukan batas lulus di luar aplikasi. |
+| **Ekspor CSV satu kelas** | Ekspor hanya per peserta (dari detail sesi) | Salin nilai dari tab **Sesi**; ekspor per kelas sudah dicatat sebagai permintaan. |
+| "Langkah Berikutnya yang Direkomendasikan" di halaman hasil (JavaScript, React, CSS…) | Contoh statis, tidak terkait tes Anda | Abaikan; akan disembunyikan. |
 
 Menemukan yang lain yang tidak jalan? Laporkan lewat [§10](#10-cara-melapor-masalah-atau-meminta-sesuatu) — itu justru gunanya uji coba.
 
@@ -141,7 +144,10 @@ Kuota 20 pembuat tes penuh ([§5](#5-batas-kuota-dan-apa-yang-terjadi-kalau-penu
 Owner membuka kembali **Invite Member** → tautan undangan tampil di dialog setelah "Send Invitation" → tombol **Copy** → kirim lewat WA. Undangan berlaku 7 hari; kalau lewat, buat undangan baru.
 
 #### Rekan menerima undangan tapi tidak melihat organisasi
-Ia harus **memilih organisasi** sebagai organisasi aktif: menu profil kanan atas → pilih nama organisasi. Juga pastikan ia mendaftar dengan **email yang sama** persis dengan yang diundang (undangan per email hanya bisa diterima akun itu).
+Ia harus **memilih organisasi** sebagai organisasi aktif: menu profil kanan atas → **Ganti Organisasi** → nama organisasi (muat ulang halaman dulu kalau namanya belum ada di daftar). Juga pastikan ia mendaftar dengan **email yang sama** persis dengan yang diundang (undangan per email hanya bisa diterima akun itu).
+
+#### Halaman undangan bilang "tidak valid"
+Undangan sudah dipakai, sudah lewat 7 hari, atau tautannya terpotong saat disalin (harus utuh sampai akhir `code=…`). Minta Owner membuat undangan baru.
 
 #### Anggota tidak bisa melihat tes yang saya buat
 Memang begitu (lihat catatan [§2](#2-siapa-berperan-apa)). Bagikan tautan tes/hasilnya. Kalau tim ingin satu orang menilai tes orang lain, orang yang membuat tes yang harus menilai, atau buat tesnya dari akun yang sama.
@@ -189,7 +195,7 @@ Halaman hasil menunjukkan jumlah benar/salah dan sertifikat. Rincian per soal un
 Ya, siapa pun yang **memegang tautannya**. Alamatnya acak dan tidak bisa ditebak, tetapi peserta yang meneruskan tautan berarti membagikan hasilnya. Kunci jawaban tidak pernah ada di halaman peserta.
 
 #### Ingin rekap nilai satu kelas
-[Ekspor CSV](/panduan-pengguna/sesi-tes#ekspor-hasil-csv) dari halaman Sesi Tes → buka di Excel/Sheets.
+Buka tes → tab **Sesi**: nama, email, nilai, dan status tiap peserta ada di satu daftar — salin ke Excel/Sheets. **Ekspor Laporan** (CSV) ada di detail tiap sesi dan berisi jawaban per soal **satu peserta**.
 
 ### Umum
 
@@ -265,7 +271,7 @@ Sebulan sebelum tanggal selesai, penyelenggara mengirim **ringkasan pemakaian** 
 2. **Berhenti** — data perusahaan Anda diekspor (soal, tes, hasil dalam CSV/JSON) kalau diminta, lalu organisasi dan akun dinonaktifkan atau dihapus **atas permintaan tertulis** Owner. Tanpa permintaan, data disimpan dalam arsip cadangan sesuai kebijakan penyelenggara.
 3. **Serah terima** — tim lain melanjutkan; penyelenggara menyerahkan cadangan data dan panduan operasionalnya.
 
-Apa pun keputusannya: **ekspor CSV hasil-hasil penting sebelum tanggal selesai**, supaya rapor/rekap tidak bergantung pada aplikasi.
+Apa pun keputusannya: **salin rekap nilai dan ekspor laporan sesi yang penting sebelum tanggal selesai**, supaya rapor/rekap tidak bergantung pada aplikasi.
 
 ## 12. Istilah yang dipakai
 
